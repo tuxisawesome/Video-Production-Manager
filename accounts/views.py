@@ -1,5 +1,8 @@
+import os
+import shutil
 import tempfile
 
+from django.conf import settings as django_settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.contrib.auth.decorators import login_required, user_passes_test
@@ -70,6 +73,9 @@ def admin_dashboard_view(request):
     site_settings = SiteSettings.load()
     site_settings_form = SiteSettingsForm(instance=site_settings)
 
+    # Disk storage info
+    storage = _get_storage_info()
+
     return render(
         request,
         "accounts/dashboard.html",
@@ -78,8 +84,45 @@ def admin_dashboard_view(request):
             "create_user_form": create_user_form,
             "site_settings": site_settings,
             "site_settings_form": site_settings_form,
+            "storage": storage,
         },
     )
+
+
+def _get_storage_info():
+    """Return disk usage stats for the media directory."""
+    media_root = str(django_settings.MEDIA_ROOT)
+
+    # Disk-level stats
+    try:
+        disk = shutil.disk_usage(media_root)
+        disk_total = disk.total
+        disk_used = disk.used
+        disk_free = disk.free
+    except OSError:
+        disk_total = disk_used = disk_free = 0
+
+    # Media directory size (videos + thumbnails)
+    media_bytes = 0
+    video_count = 0
+    for dirpath, _dirnames, filenames in os.walk(media_root):
+        for f in filenames:
+            fp = os.path.join(dirpath, f)
+            try:
+                media_bytes += os.path.getsize(fp)
+            except OSError:
+                pass
+            if f.endswith(('.webm', '.mp4', '.mkv')):
+                video_count += 1
+
+    return {
+        'disk_total': disk_total,
+        'disk_used': disk_used,
+        'disk_free': disk_free,
+        'disk_used_pct': round(disk_used / disk_total * 100, 1) if disk_total else 0,
+        'media_bytes': media_bytes,
+        'video_count': video_count,
+    }
 
 
 @login_required

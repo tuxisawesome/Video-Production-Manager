@@ -10,6 +10,39 @@
 <div class="content-area">
   <div class="admin-grid">
 
+    <!-- Storage -->
+    <div class="md-card-elevated" style="padding:24px;">
+      <h2 class="md-title-large" style="margin-bottom:20px;">
+        <span class="material-symbols-outlined" style="font-size:22px; vertical-align:middle; margin-right:8px;">storage</span>
+        Storage
+      </h2>
+
+      <div style="display:flex; gap:24px; flex-wrap:wrap; margin-bottom:16px;">
+        <div>
+          <span class="md-body-small text-on-surface-variant">Disk Used</span>
+          <div class="md-title-medium">{{ storage.disk_used|filesizeformat }} / {{ storage.disk_total|filesizeformat }}</div>
+        </div>
+        <div>
+          <span class="md-body-small text-on-surface-variant">Disk Free</span>
+          <div class="md-title-medium">{{ storage.disk_free|filesizeformat }}</div>
+        </div>
+        <div>
+          <span class="md-body-small text-on-surface-variant">Media Files</span>
+          <div class="md-title-medium">{{ storage.media_bytes|filesizeformat }}</div>
+        </div>
+        <div>
+          <span class="md-body-small text-on-surface-variant">Videos</span>
+          <div class="md-title-medium">{{ storage.video_count }}</div>
+        </div>
+      </div>
+
+      <!-- Usage bar -->
+      <div style="height:8px; border-radius:4px; background:var(--md-sys-color-surface-container-highest); overflow:hidden;">
+        <div style="height:100%; width:{{ storage.disk_used_pct }}%; border-radius:4px; background:{% if storage.disk_used_pct > 90 %}var(--md-sys-color-error){% elif storage.disk_used_pct > 75 %}var(--md-sys-color-tertiary){% else %}var(--md-sys-color-primary){% endif %}; transition:width 0.3s;"></div>
+      </div>
+      <span class="md-body-small text-on-surface-variant" style="margin-top:4px; display:inline-block;">{{ storage.disk_used_pct }}% used</span>
+    </div>
+
     <!-- Site Settings -->
     <div class="md-card-elevated" style="padding:24px;">
       <h2 class="md-title-large" style="margin-bottom:20px;">

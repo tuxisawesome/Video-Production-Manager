@@ -386,6 +386,28 @@ function cancelReconnect() {
 // Keyboard controls
 // ---------------------------------------------------------------------------
 
+// Map event.code values to event.key equivalents for fallback matching.
+const CODE_TO_KEY = {
+    'Space': ' ',
+    'Escape': 'Escape',
+    'Enter': 'Enter',
+    'ShiftLeft': 'Shift',
+    'ShiftRight': 'Shift',
+    'ControlLeft': 'Control',
+    'ControlRight': 'Control',
+};
+
+function matchesKeybind(event, keybindCode) {
+    if (event.code === keybindCode) return true;
+    // Fallback: match by event.key for known keys.
+    if (CODE_TO_KEY[keybindCode] && event.key === CODE_TO_KEY[keybindCode]) return true;
+    // Fallback: letter keys ('KeyA' -> 'a').
+    if (keybindCode.startsWith('Key') && event.key.toLowerCase() === keybindCode.slice(3).toLowerCase()) return true;
+    // Fallback: digit keys ('Digit1' -> '1').
+    if (keybindCode.startsWith('Digit') && event.key === keybindCode.slice(5)) return true;
+    return false;
+}
+
 function onKeyDown(event) {
     // Ignore keybinds when focused on form elements.
     const tag = event.target.tagName.toLowerCase();
@@ -395,7 +417,7 @@ function onKeyDown(event) {
 
     if (!isPhoneConnected) return;
 
-    if (event.code === keybinds.start_stop_key) {
+    if (matchesKeybind(event, keybinds.start_stop_key)) {
         event.preventDefault();
         if (isRecording) {
             wsSend({ type: 'stop_recording' });
@@ -405,7 +427,7 @@ function onKeyDown(event) {
         return;
     }
 
-    if (event.code === keybinds.discard_key) {
+    if (matchesKeybind(event, keybinds.discard_key)) {
         event.preventDefault();
         if (isRecording) {
             wsSend({ type: 'discard_recording' });

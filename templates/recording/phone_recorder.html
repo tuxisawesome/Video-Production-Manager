@@ -210,6 +210,6 @@
     "ws_url": "{% if request.is_secure %}wss{% else %}ws{% endif %}://{{ request.get_host }}/ws/recording/phone/{{ token }}/"
   }
   </script>
-  <script type="module" src="{% static 'js/phone-recorder.js' %}"></script>
+  <script type="module" src="{% static 'js/phone-recorder.js' %}?v=2"></script>
 </body>
 </html>

@@ -210,7 +210,7 @@ async function initCamera() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         setStatusText('Camera not supported');
         setConnectionUI('disconnected', 'Unsupported browser');
-        wsSend({ type: 'error', message: 'getUserMedia not available on this browser' });
+        wsSend({ type: 'status_update', status: 'error', data: { message: 'getUserMedia not available on this browser' } });
         return false;
     }
 
@@ -249,7 +249,7 @@ async function initCamera() {
 
         setStatusText(userMsg);
         setConnectionUI('disconnected', 'Camera error');
-        wsSend({ type: 'error', message: userMsg });
+        wsSend({ type: 'status_update', status: 'error', data: { message: userMsg } });
         return false;
     }
 }
@@ -326,7 +326,7 @@ function createMediaRecorder() {
         return recorder;
     } catch (err) {
         logError('Recorder', 'Failed to create MediaRecorder:', err);
-        wsSend({ type: 'error', message: `MediaRecorder creation failed: ${err.message}` });
+        wsSend({ type: 'status_update', status: 'error', data: { message: `MediaRecorder creation failed: ${err.message}` } });
         return null;
     }
 }
@@ -348,7 +348,7 @@ function onRecorderStop() {
 
 function onRecorderError(event) {
     logError('Recorder', 'Error:', event.error);
-    wsSend({ type: 'error', message: `Recording error: ${event.error ? event.error.message : 'unknown'}` });
+    wsSend({ type: 'status_update', status: 'error', data: { message: `Recording error: ${event.error ? event.error.message : 'unknown'}` } });
 }
 
 // ---------------------------------------------------------------------------
@@ -391,7 +391,7 @@ async function processChunkQueue() {
         const percent = totalBytesQueued > 0
             ? Math.round((totalBytesUploaded / totalBytesQueued) * 100)
             : 0;
-        wsSend({ type: 'upload_progress', percent: percent });
+        wsSend({ type: 'status_update', status: 'status_upload_progress', data: { percent: percent } });
         showUploadProgress(percent);
 
         log('Upload', `Chunk ${currentIndex} uploaded (${blob.size} bytes), progress=${percent}%`);
@@ -433,7 +433,7 @@ async function finalizeRecording() {
         const data = await response.json();
         const videoId = data.video_id;
 
-        wsSend({ type: 'upload_complete', video_id: videoId });
+        wsSend({ type: 'status_update', status: 'status_upload_complete', data: { video_id: videoId } });
         log('Finalize', `Complete. video_id=${videoId}`);
 
         setStatusText('Upload complete');
@@ -441,7 +441,7 @@ async function finalizeRecording() {
         resetRecordingState();
     } catch (err) {
         logError('Finalize', err);
-        wsSend({ type: 'error', message: `Finalize failed: ${err.message}` });
+        wsSend({ type: 'status_update', status: 'error', data: { message: `Finalize failed: ${err.message}` } });
         setStatusText('Upload failed');
     }
 }
@@ -465,7 +465,7 @@ async function discardRecording() {
         logError('Discard', err);
     }
 
-    wsSend({ type: 'recording_discarded' });
+    wsSend({ type: 'status_update', status: 'status_discarded', data: {} });
 
     isRecording = false;
     resetTimer();
@@ -506,7 +506,7 @@ function handleStartCommand() {
     }
 
     if (!mediaStream) {
-        wsSend({ type: 'error', message: 'Camera not initialized' });
+        wsSend({ type: 'status_update', status: 'error', data: { message: 'Camera not initialized' } });
         return;
     }
 
@@ -523,12 +523,12 @@ function handleStartCommand() {
         mediaRecorder.start(5000); // 5-second timeslice
     } catch (err) {
         logError('Recorder', 'start() failed:', err);
-        wsSend({ type: 'error', message: `Failed to start recording: ${err.message}` });
+        wsSend({ type: 'status_update', status: 'error', data: { message: `Failed to start recording: ${err.message}` } });
         isRecording = false;
         return;
     }
 
-    wsSend({ type: 'recording_started' });
+    wsSend({ type: 'status_update', status: 'status_recording', data: {} });
     log('Command', 'Recording started');
 
     startTimer();
@@ -546,7 +546,7 @@ function handleStopCommand() {
     isRecording = false;
     stopMediaRecorder();
 
-    wsSend({ type: 'recording_stopped' });
+    wsSend({ type: 'status_update', status: 'status_stopped', data: {} });
     log('Command', 'Recording stopped');
 
     stopTimer();
@@ -622,15 +622,15 @@ function onWsMessage(event) {
             wsSend({ type: 'pong' });
             break;
 
-        case 'command_start':
+        case 'start_recording':
             handleStartCommand();
             break;
 
-        case 'command_stop':
+        case 'stop_recording':
             handleStopCommand();
             break;
 
-        case 'command_discard':
+        case 'discard_recording':
             handleDiscardCommand();
             break;
 

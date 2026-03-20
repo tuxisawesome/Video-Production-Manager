@@ -1,0 +1,20 @@
+[Unit]
+Description=VPM Gunicorn HTTP Server
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/vpm
+ExecStart=/var/www/vpm/venv/bin/gunicorn vpm.wsgi:application \
+    --bind 127.0.0.1:8000 \
+    --workers 3 \
+    --timeout 300 \
+    --max-requests 1000 \
+    --max-requests-jitter 50
+Restart=always
+RestartSec=3
+Environment="DJANGO_SETTINGS_MODULE=vpm.settings"
+
+[Install]
+WantedBy=multi-user.target

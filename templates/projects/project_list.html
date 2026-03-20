@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}My Projects - Video Production Manager{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">
+      My Projects
+      <span class="md-badge large" style="vertical-align:middle; margin-left:8px; background-color:var(--md-sys-color-primary); color:var(--md-sys-color-on-primary);">
+        {{ projects|length }}
+      </span>
+    </h1>
+  </div>
+</div>
+
+<div class="content-area">
+  {% if projects %}
+    <div class="grid-container">
+      {% for project in projects %}
+        <a href="{% url 'projects:detail' project.pk %}" class="md-card-elevated" style="padding:20px; text-decoration:none; color:inherit;">
+          <h3 class="md-title-medium" style="margin-bottom:8px;">{{ project.name }}</h3>
+          {% if project.description %}
+            <p class="md-body-medium text-on-surface-variant" style="margin-bottom:12px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">
+              {{ project.description }}
+            </p>
+          {% endif %}
+          <div class="flex items-center gap-sm" style="margin-top:auto;">
+            <span class="md-label-medium text-on-surface-variant">
+              <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">videocam</span>
+              {{ project.videos.count }} video{{ project.videos.count|pluralize }}
+            </span>
+            <span class="md-label-medium text-on-surface-variant" style="margin-left:auto;">
+              Updated {{ project.updated_at|timesince }} ago
+            </span>
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-state-icon">
+        <span class="material-symbols-outlined">video_library</span>
+      </div>
+      <h2 class="empty-state-title">No projects yet</h2>
+      <p class="empty-state-description">Create your first project to start recording and managing videos.</p>
+      <div class="empty-state-action">
+        <button type="button" class="md-button-filled" onclick="document.getElementById('create-dialog-overlay').classList.add('open');">
+          <span class="material-symbols-outlined">add</span>
+          New Project
+        </button>
+      </div>
+    </div>
+  {% endif %}
+</div>
+
+{# ── FAB: New Project ── #}
+<button
+  type="button"
+  class="md-fab-extended"
+  style="position:fixed; bottom:24px; right:24px; z-index:50;"
+  onclick="document.getElementById('create-dialog-overlay').classList.add('open');"
+>
+  <span class="material-symbols-outlined">add</span>
+  New Project
+</button>
+
+{# ── Dialog: Create Project ── #}
+<div id="create-dialog-overlay" class="md-dialog-overlay" onclick="if(event.target===this)this.classList.remove('open');">
+  <div class="md-dialog">
+    <h2 class="md-dialog-title">New Project</h2>
+    <div class="md-dialog-content">
+      <form id="create-project-form" method="post" action="{% url 'projects:create' %}">
+        {% csrf_token %}
+        <div class="form-section">
+          <div class="md-text-field {% if form.name.errors %}error{% endif %}">
+            <div class="md-text-field-container">
+              <input
+                type="text"
+                id="id_name"
+                name="name"
+                value="{{ form.name.value|default:'' }}"
+                placeholder=" "
+                required
+                maxlength="255"
+              >
+              <label for="id_name">Project Name</label>
+            </div>
+            {% if form.name.errors %}
+              {% for error in form.name.errors %}
+                <span class="md-supporting-text">{{ error }}</span>
+              {% endfor %}
+            {% endif %}
+          </div>
+
+          <div class="md-text-field {% if form.description.errors %}error{% endif %}">
+            <div class="md-text-field-container">
+              <textarea
+                id="id_description"
+                name="description"
+                rows="3"
+                placeholder=" "
+              >{{ form.description.value|default:'' }}</textarea>
+              <label for="id_description">Description (optional)</label>
+            </div>
+            {% if form.description.errors %}
+              {% for error in form.description.errors %}
+                <span class="md-supporting-text">{{ error }}</span>
+              {% endfor %}
+            {% endif %}
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="md-dialog-actions">
+      <button type="button" class="md-button-text" onclick="document.getElementById('create-dialog-overlay').classList.remove('open');">
+        Cancel
+      </button>
+      <button type="submit" form="create-project-form" class="md-button-filled">
+        Create
+      </button>
+    </div>
+  </div>
+</div>
+
+{% if form.errors %}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('create-dialog-overlay').classList.add('open');
+  });
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,215 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Recording</title>
+  <link rel="stylesheet" href="{% static 'css/m3-tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'css/responsive.css' %}">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+      font-family: var(--md-sys-typescale-font-family);
+      color: #fff;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    .recorder-shell {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Camera viewfinder */
+    #viewfinder {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: #000;
+    }
+
+    /* Status overlay at top */
+    .status-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      padding: 16px;
+      padding-top: max(16px, env(safe-area-inset-top));
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 10;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, transparent 100%);
+    }
+
+    /* Connection indicator */
+    .connection-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 9999px;
+      background: rgba(0,0,0,0.5);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .connection-indicator .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--md-sys-color-outline);
+    }
+    .connection-indicator.connected .dot {
+      background: var(--md-sys-color-success);
+    }
+    .connection-indicator.disconnected .dot {
+      background: var(--md-sys-color-error);
+    }
+
+    /* Status chip (waiting / recording / uploading) */
+    .status-chip {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 9999px;
+      background: rgba(0,0,0,0.5);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .status-chip.recording {
+      background: rgba(179, 38, 30, 0.8);
+    }
+    .status-chip.uploading {
+      background: rgba(103, 80, 164, 0.8);
+    }
+
+    /* Recording timer */
+    .recording-timer {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 10;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-radius: 9999px;
+      background: rgba(179, 38, 30, 0.85);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+    .recording-timer.active {
+      display: flex;
+    }
+    .recording-timer .rec-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #ff4444;
+      animation: pulse-dot 1s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    .recording-timer .timer-text {
+      font-size: 18px;
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Upload progress bar */
+    .upload-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 10;
+      padding-bottom: max(8px, env(safe-area-inset-bottom));
+      display: none;
+    }
+    .upload-bar.active {
+      display: block;
+    }
+    .upload-bar-track {
+      height: 4px;
+      background: rgba(255,255,255,0.2);
+    }
+    .upload-bar-fill {
+      height: 100%;
+      background: var(--md-sys-color-primary);
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+  </style>
+</head>
+<body>
+  <div class="recorder-shell">
+    {# Camera feed #}
+    <video id="viewfinder" autoplay playsinline muted></video>
+
+    {# Top status bar #}
+    <div class="status-bar">
+      <div id="connection-indicator" class="connection-indicator">
+        <span class="dot"></span>
+        <span id="connection-text">Connecting...</span>
+      </div>
+      <div id="status-chip" class="status-chip">
+        <span id="status-text">Waiting</span>
+      </div>
+    </div>
+
+    {# Recording timer (center) #}
+    <div id="recording-timer" class="recording-timer">
+      <span class="rec-dot"></span>
+      <span class="timer-text" id="timer-text">00:00</span>
+    </div>
+
+    {# Upload progress (bottom) #}
+    <div id="upload-bar" class="upload-bar">
+      <div class="upload-bar-track">
+        <div class="upload-bar-fill" id="upload-bar-fill"></div>
+      </div>
+    </div>
+  </div>
+
+  {# Data for JavaScript #}
+  <script id="page-data" type="application/json">
+  {
+    "token": "{{ token }}",
+    "session_id": "{{ session_id }}",
+    "recording_settings": {
+      "video_resolution": "{{ settings.video_resolution }}",
+      "frame_rate": {{ settings.frame_rate }},
+      "video_codec": "{{ settings.video_codec }}",
+      "audio_enabled": {{ settings.audio_enabled|yesno:"true,false" }},
+      "audio_codec": "{{ settings.audio_codec }}",
+      "audio_bitrate": {{ settings.audio_bitrate }}
+    },
+    "chunk_upload_url": "{% url 'recording:phone_chunk_upload' token %}",
+    "finalize_url": "{% url 'recording:phone_finalize' token %}",
+    "discard_url": "{% url 'recording:phone_discard' token %}",
+    "ws_url": "{% if request.is_secure %}wss{% else %}ws{% endif %}://{{ request.get_host }}/ws/recording/phone/{{ token }}/"
+  }
+  </script>
+  <script type="module" src="{% static 'js/phone-recorder.js' %}"></script>
+</body>
+</html>

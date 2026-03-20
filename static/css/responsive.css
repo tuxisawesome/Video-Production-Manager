@@ -1,0 +1,606 @@
+/* ==========================================================================
+   Responsive Breakpoints
+   Video Production Manager
+
+   Mobile (< 600px)   - single column, stacked layout, hide nav rail
+   Tablet (600-1200px) - 2-column grid, compact nav
+   Desktop (> 1200px)  - full layout with rail
+
+   Uses M3 adaptive layout guidelines.
+   ========================================================================== */
+
+/* ==========================================================================
+   MOBILE (< 600px)
+   Compact - single column, no rail, full-width cards
+   ========================================================================== */
+
+@media (max-width: 599px) {
+
+  /* App shell: stack everything vertically, no rail */
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "topbar"
+      "main";
+  }
+
+  /* Hide the navigation rail entirely on mobile */
+  .app-shell > .md-navigation-rail {
+    display: none;
+  }
+
+  /* Reduce top app bar height */
+  .md-top-app-bar {
+    height: 56px;
+  }
+
+  .md-top-app-bar .title {
+    font-size: var(--md-sys-typescale-title-medium-size);
+  }
+
+  /* Content area: tighter padding */
+  .content-area {
+    padding: 12px 16px 24px;
+  }
+
+  /* Page header: stack on mobile */
+  .page-header {
+    padding: 16px 16px 8px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .page-header .page-title {
+    font-size: var(--md-sys-typescale-headline-small-size);
+    line-height: var(--md-sys-typescale-headline-small-line-height);
+  }
+
+  .page-header .page-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  /* Grids: single column */
+  .grid-container,
+  .grid-container.compact,
+  .grid-container.wide-cards {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .video-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  /* Two-panel: stack vertically */
+  .two-panel {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  /* Sidebar layout: sidebar overlays on mobile (handled by .md-sidebar fixed) */
+  .sidebar-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  .sidebar-layout .sidebar-panel {
+    display: none;
+  }
+
+  /* Use the fixed sidebar overlay on mobile instead */
+  .md-sidebar {
+    width: 100vw;
+  }
+
+  /* Action bar: scroll horizontally */
+  .action-bar {
+    padding: 8px 0;
+    gap: 8px;
+  }
+
+  .action-bar .action-search {
+    min-width: 0;
+    flex: 1;
+  }
+
+  /* Form rows: stack on mobile */
+  .form-row {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  /* Form actions: full width buttons */
+  .form-actions {
+    flex-direction: column-reverse;
+  }
+
+  .form-actions > * {
+    width: 100%;
+  }
+
+  /* Cards: full width */
+  .md-card,
+  .md-card-elevated,
+  .md-card-filled,
+  .md-card-outlined {
+    border-radius: var(--md-sys-shape-corner-medium);
+  }
+
+  /* Dialog: nearly full width */
+  .md-dialog {
+    min-width: unset;
+    width: calc(100% - 32px);
+    max-height: calc(100vh - 32px);
+    margin: 16px;
+  }
+
+  /* Snackbar: full width on mobile */
+  .md-snackbar {
+    left: 16px;
+    right: 16px;
+    transform: translateX(0) translateY(100px);
+    min-width: unset;
+    width: auto;
+  }
+
+  .md-snackbar.show {
+    transform: translateX(0) translateY(0);
+  }
+
+  /* FAB: fixed position bottom right */
+  .md-fab-fixed {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    z-index: 200;
+  }
+
+  /* Empty state: less padding */
+  .empty-state {
+    padding: 40px 16px;
+    min-height: 240px;
+  }
+
+  .empty-state .empty-state-icon {
+    width: 64px;
+    height: 64px;
+    font-size: 32px;
+  }
+
+  /* Drop zone: compact */
+  .drop-zone {
+    padding: 32px 16px;
+  }
+
+  /* Stat cards in single column */
+  .stat-card .stat-value {
+    font-size: var(--md-sys-typescale-headline-medium-size);
+  }
+
+  /* Table: horizontal scroll */
+  .md-table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ==========================================================================
+   TABLET (600px - 1199px)
+   Medium - 2-column grid, compact navigation
+   ========================================================================== */
+
+@media (min-width: 600px) and (max-width: 1199px) {
+
+  /* App shell: narrow rail or hidden */
+  .app-shell {
+    grid-template-columns: auto 1fr;
+  }
+
+  /* Compact navigation rail */
+  .md-navigation-rail {
+    width: 64px;
+  }
+
+  .md-navigation-rail .md-fab {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--md-sys-shape-corner-medium);
+  }
+
+  .md-navigation-rail-item .label {
+    font-size: 10px;
+  }
+
+  .md-navigation-rail-item .icon-container {
+    width: 48px;
+  }
+
+  /* Content area */
+  .content-area {
+    padding: 16px 20px 28px;
+  }
+
+  /* Grids: 2 columns */
+  .grid-container {
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+  }
+
+  .grid-container.wide-cards {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  }
+
+  .video-grid {
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+  }
+
+  /* Two-panel: can stay side-by-side but narrower */
+  .two-panel {
+    gap: 16px;
+  }
+
+  /* Sidebar layout: narrower sidebar */
+  .sidebar-layout.sidebar-open {
+    grid-template-columns: 1fr 300px;
+  }
+
+  /* Form row: 2 items */
+  .form-row {
+    gap: 14px;
+  }
+
+  /* Dialog */
+  .md-dialog {
+    max-width: 480px;
+  }
+}
+
+/* ==========================================================================
+   DESKTOP (>= 1200px)
+   Expanded - full layout with navigation rail
+   ========================================================================== */
+
+@media (min-width: 1200px) {
+
+  /* Full navigation rail */
+  .md-navigation-rail {
+    width: var(--md-sys-navigation-rail-width);
+  }
+
+  /* Content area: generous padding */
+  .content-area {
+    padding: 20px 24px 32px;
+  }
+
+  /* Grids: 3+ columns */
+  .grid-container {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+  }
+
+  .video-grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+  }
+
+  /* Two-panel: comfortable spacing */
+  .two-panel {
+    gap: 24px;
+  }
+
+  /* Sidebar layout: standard width */
+  .sidebar-layout.sidebar-open {
+    grid-template-columns: 1fr 360px;
+  }
+}
+
+/* ==========================================================================
+   LARGE DESKTOP (>= 1600px)
+   Extra-large screens
+   ========================================================================== */
+
+@media (min-width: 1600px) {
+
+  .content-area {
+    padding: 24px 32px 40px;
+  }
+
+  .content-area.wide {
+    max-width: 1800px;
+  }
+
+  .grid-container {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+  }
+
+  .video-grid {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+  }
+}
+
+/* ==========================================================================
+   PHONE RECORDER STYLES
+   Full-screen camera viewfinder for mobile recording
+   ========================================================================== */
+
+.recorder-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background-color: #000;
+  display: flex;
+  flex-direction: column;
+}
+
+.recorder-viewfinder {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.recorder-viewfinder video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Viewfinder overlay (guides, timer, status) */
+.recorder-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+}
+
+.recorder-overlay .recorder-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  pointer-events: auto;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, transparent 100%);
+}
+
+.recorder-overlay .recorder-timer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  font-family: var(--md-sys-typescale-font-family);
+  font-size: var(--md-sys-typescale-title-medium-size);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.recorder-overlay .recorder-timer .rec-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: #FF4444;
+  animation: pulse-recording 1.2s ease-in-out infinite;
+}
+
+.recorder-overlay .recorder-bottom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
+  pointer-events: auto;
+  background: linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 100%);
+  gap: 32px;
+}
+
+/* Record button */
+.recorder-record-button {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 4px solid #fff;
+  background-color: transparent;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-expressive);
+}
+
+.recorder-record-button::after {
+  content: '';
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background-color: #FF4444;
+  transition:
+    border-radius var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized),
+    width var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized),
+    height var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized);
+}
+
+.recorder-record-button:active {
+  transform: scale(0.92);
+}
+
+/* Recording active state: red circle becomes rounded square */
+.recorder-record-button.recording::after {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+}
+
+/* Recorder action buttons (flip camera, etc.) */
+.recorder-action-button {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: none;
+  background-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition:
+    background-color var(--md-sys-motion-transition-standard),
+    transform var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-expressive);
+}
+
+.recorder-action-button:active {
+  transform: scale(0.90);
+  background-color: rgba(255, 255, 255, 0.35);
+}
+
+/* Recording quality indicator */
+.recorder-quality-badge {
+  padding: 4px 10px;
+  border-radius: var(--md-sys-shape-corner-full);
+  background-color: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: var(--md-sys-typescale-label-small-size);
+  font-weight: var(--md-sys-typescale-label-small-weight);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* ==========================================================================
+   LANDSCAPE ORIENTATION (Phone Recording)
+   ========================================================================== */
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .recorder-overlay .recorder-bottom-bar {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    flex-direction: column;
+    width: auto;
+    padding: 16px;
+    background: linear-gradient(to left, rgba(0,0,0,0.5) 0%, transparent 100%);
+  }
+
+  .recorder-overlay .recorder-top-bar {
+    background: linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, transparent 100%);
+  }
+}
+
+/* ==========================================================================
+   SAFE AREA INSETS (for notched phones)
+   ========================================================================== */
+
+@supports (padding: env(safe-area-inset-top)) {
+  .recorder-overlay .recorder-top-bar {
+    padding-top: max(16px, env(safe-area-inset-top));
+  }
+
+  .recorder-overlay .recorder-bottom-bar {
+    padding-bottom: max(24px, env(safe-area-inset-bottom));
+  }
+
+  @media (max-width: 599px) {
+    .md-top-app-bar {
+      padding-top: env(safe-area-inset-top);
+      height: calc(56px + env(safe-area-inset-top));
+    }
+  }
+}
+
+/* ==========================================================================
+   PRINT STYLES
+   ========================================================================== */
+
+@media print {
+  .md-navigation-rail,
+  .md-top-app-bar,
+  .md-fab,
+  .md-fab-extended,
+  .md-fab-fixed,
+  .md-snackbar,
+  .md-sidebar,
+  .md-sidebar-overlay,
+  .md-dialog-overlay,
+  .action-bar .action-search,
+  .recorder-fullscreen {
+    display: none !important;
+  }
+
+  .app-shell {
+    display: block;
+  }
+
+  .content-area {
+    padding: 0;
+  }
+
+  .md-card,
+  .md-card-elevated,
+  .md-card-filled,
+  .md-card-outlined {
+    box-shadow: none;
+    border: 1px solid #ccc;
+    break-inside: avoid;
+  }
+
+  body {
+    background: #fff;
+    color: #000;
+  }
+}
+
+/* ==========================================================================
+   REDUCED MOTION
+   Respect user preference for reduced motion
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ==========================================================================
+   HIGH CONTRAST MODE
+   ========================================================================== */
+
+@media (forced-colors: active) {
+  .md-button-filled,
+  .md-button-tonal {
+    border: 1px solid ButtonText;
+  }
+
+  .md-card,
+  .md-card-elevated,
+  .md-card-filled,
+  .md-card-outlined {
+    border: 1px solid CanvasText;
+  }
+
+  .md-chip {
+    border: 1px solid ButtonText;
+  }
+
+  .md-switch .md-switch-track {
+    border: 2px solid ButtonText;
+  }
+
+  .md-progress-linear {
+    border: 1px solid CanvasText;
+  }
+
+  .md-progress-linear .md-progress-linear-indicator {
+    background-color: Highlight;
+  }
+}

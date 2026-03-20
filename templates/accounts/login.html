@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Sign In - Video Production Manager{% endblock %}
+
+{% block shell_class %}no-rail{% endblock %}
+
+{% block content %}
+<div class="content-area" style="display:flex; align-items:center; justify-content:center; min-height:100%;">
+  <div class="md-card-elevated" style="width:100%; max-width:400px; padding:32px;">
+
+    {# ── App Title / Logo ── #}
+    <div style="text-align:center; margin-bottom:32px;">
+      <span class="material-symbols-outlined" style="font-size:48px; color:var(--md-sys-color-primary);">
+        videocam
+      </span>
+      <h1 class="md-headline-small" style="margin-top:12px;">Video Production Manager</h1>
+      <p class="md-body-medium text-on-surface-variant" style="margin-top:4px;">Sign in to continue</p>
+    </div>
+
+    {# ── Non-field errors ── #}
+    {% if form.non_field_errors %}
+      <div style="margin-bottom:16px; padding:12px 16px; border-radius:var(--md-sys-shape-corner-small); background-color:var(--md-sys-color-error-container); color:var(--md-sys-color-on-error-container);">
+        {% for error in form.non_field_errors %}
+          <p class="md-body-medium">{{ error }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {# ── Login Form ── #}
+    <form method="post" action="{% url 'accounts:login' %}">
+      {% csrf_token %}
+
+      {% if request.GET.next %}
+        <input type="hidden" name="next" value="{{ request.GET.next }}">
+      {% endif %}
+
+      {# Username field #}
+      <div class="md-text-field {% if form.username.errors %}error{% endif %}" style="margin-bottom:20px;">
+        <div class="md-text-field-container">
+          <input
+            type="text"
+            id="id_username"
+            name="username"
+            value="{{ form.username.value|default:'' }}"
+            placeholder=" "
+            autofocus
+            required
+          >
+          <label for="id_username">Username</label>
+        </div>
+        {% if form.username.errors %}
+          {% for error in form.username.errors %}
+            <span class="md-supporting-text">{{ error }}</span>
+          {% endfor %}
+        {% endif %}
+      </div>
+
+      {# Password field #}
+      <div class="md-text-field {% if form.password.errors %}error{% endif %}" style="margin-bottom:28px;">
+        <div class="md-text-field-container">
+          <input
+            type="password"
+            id="id_password"
+            name="password"
+            placeholder=" "
+            required
+          >
+          <label for="id_password">Password</label>
+        </div>
+        {% if form.password.errors %}
+          {% for error in form.password.errors %}
+            <span class="md-supporting-text">{{ error }}</span>
+          {% endfor %}
+        {% endif %}
+      </div>
+
+      {# Submit button #}
+      <button type="submit" class="md-button-filled" style="width:100%;">
+        Sign In
+      </button>
+    </form>
+
+  </div>
+</div>
+{% endblock %}

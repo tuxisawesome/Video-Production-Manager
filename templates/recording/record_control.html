@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Recording - {{ project.name }} - Video Production Manager{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <a href="{% url 'projects:detail' project.pk %}" class="md-body-medium" style="display:inline-flex; align-items:center; gap:4px; margin-bottom:4px; color:var(--md-sys-color-primary);">
+      <span class="material-symbols-outlined" style="font-size:18px;">arrow_back</span>
+      {{ project.name }}
+    </a>
+    <h1 class="page-title">Recording - {{ project.name }}</h1>
+  </div>
+</div>
+
+<div class="content-area">
+
+  <div class="grid-container wide-cards">
+
+    {# ── QR Code Area ── #}
+    <div class="md-card-elevated" style="padding:24px;">
+      <h2 class="md-title-large" style="margin-bottom:16px;">Connect Phone</h2>
+      <p class="md-body-medium text-on-surface-variant" style="margin-bottom:16px;">
+        Scan the QR code with your phone to start recording.
+      </p>
+      <div id="qr-container" style="display:flex; align-items:center; justify-content:center; min-height:280px; background:var(--md-sys-color-surface-container-highest); border-radius:var(--md-sys-shape-corner-medium); padding:24px;">
+        <div id="qr-code" style="display:flex; align-items:center; justify-content:center;">
+          <div class="md-progress-linear indeterminate" style="width:200px;">
+            <div class="md-progress-linear-indicator"></div>
+          </div>
+        </div>
+      </div>
+
+      {# ── Status ── #}
+      <div style="margin-top:16px; display:flex; flex-direction:column; gap:12px;">
+        <div class="flex items-center gap-sm">
+          <span class="material-symbols-outlined" style="font-size:20px;" id="connection-icon">radio_button_unchecked</span>
+          <span class="md-body-medium" id="connection-status">Waiting for connection...</span>
+        </div>
+        <div class="flex items-center gap-sm">
+          <span class="material-symbols-outlined" style="font-size:20px; color:var(--md-sys-color-on-surface-variant);" id="recording-icon">stop_circle</span>
+          <span class="md-body-medium" id="recording-status">Not recording</span>
+        </div>
+        <div class="flex items-center gap-sm" id="upload-progress-row" style="display:none;">
+          <span class="material-symbols-outlined" style="font-size:20px; color:var(--md-sys-color-primary);">cloud_upload</span>
+          <div style="flex:1;">
+            <div class="md-progress-linear" style="margin-top:4px;">
+              <div class="md-progress-linear-indicator" id="upload-progress-bar" style="width:0%;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# ── Recording Info & Timer ── #}
+    <div class="md-card-elevated" style="padding:24px;">
+      <h2 class="md-title-large" style="margin-bottom:16px;">Session</h2>
+
+      {# Timer #}
+      <div style="text-align:center; padding:24px 0;">
+        <span id="recording-timer" class="md-display-medium" style="font-variant-numeric:tabular-nums; color:var(--md-sys-color-on-surface);">00:00</span>
+      </div>
+
+      {# Recording counter #}
+      <div style="text-align:center; margin-bottom:24px;">
+        <span class="md-title-medium text-on-surface-variant">
+          Recording <span id="recording-count">0</span> of <span id="recording-max">&infin;</span>
+        </span>
+      </div>
+
+      <hr class="md-divider" style="margin-bottom:16px;">
+
+      {# Keybind hints #}
+      <div style="margin-bottom:16px;">
+        <h3 class="md-title-small" style="margin-bottom:8px;">Keyboard Shortcuts</h3>
+        <div class="flex-col gap-xs">
+          <div class="flex items-center justify-between">
+            <span class="md-body-medium text-on-surface-variant">Start / Stop Recording</span>
+            <kbd style="padding:4px 10px; border-radius:var(--md-sys-shape-corner-small); background:var(--md-sys-color-surface-container-highest); font-family:monospace; font-size:13px;" id="keybind-start-stop">Space</kbd>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="md-body-medium text-on-surface-variant">Discard Recording</span>
+            <kbd style="padding:4px 10px; border-radius:var(--md-sys-shape-corner-small); background:var(--md-sys-color-surface-container-highest); font-family:monospace; font-size:13px;" id="keybind-discard">Escape</kbd>
+          </div>
+        </div>
+      </div>
+
+      <hr class="md-divider" style="margin-bottom:16px;">
+
+      {# Settings summary #}
+      <div style="margin-bottom:16px;">
+        <div class="flex items-center justify-between" style="margin-bottom:8px;">
+          <h3 class="md-title-small">Recording Settings</h3>
+          <a href="{% url 'recording:recording_settings_view' %}" class="md-button-text" style="min-height:auto; padding:4px 8px;">
+            <span class="material-symbols-outlined" style="font-size:18px;">settings</span>
+            Edit
+          </a>
+        </div>
+        <div id="settings-summary" class="md-body-small text-on-surface-variant">
+          Loading settings...
+        </div>
+      </div>
+
+      <hr class="md-divider" style="margin-bottom:16px;">
+
+      {# End session button #}
+      <a href="{% url 'projects:detail' project.pk %}" class="md-button-outlined" style="width:100%; justify-content:center;">
+        <span class="material-symbols-outlined">stop</span>
+        End Session
+      </a>
+    </div>
+
+  </div>
+
+</div>
+
+{# ── Data for JavaScript ── #}
+<script id="page-data" type="application/json">
+{
+  "project_id": "{{ project.pk }}",
+  "session_id": "",
+  "start_session_url": "{% url 'recording:start_session' project.pk %}",
+  "keybinds_url": "{% url 'recording:keybind_view' %}",
+  "settings_url": "{% url 'recording:recording_settings_view' %}",
+  "domain": "{{ request.get_host }}",
+  "ws_scheme": "{% if request.is_secure %}wss{% else %}ws{% endif %}",
+  "csrf_token": "{{ csrf_token }}"
+}
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script src="{% static 'js/websocket-control.js' %}" defer></script>
+{% endblock %}

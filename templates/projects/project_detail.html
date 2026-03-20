@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ project.name }} - Video Production Manager{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <a href="{% url 'projects:list' %}" class="md-body-medium" style="display:inline-flex; align-items:center; gap:4px; margin-bottom:4px; color:var(--md-sys-color-primary);">
+      <span class="material-symbols-outlined" style="font-size:18px;">arrow_back</span>
+      Projects
+    </a>
+    <h1 class="page-title">{{ project.name }}</h1>
+    {% if project.description %}
+      <p class="page-subtitle">{{ project.description }}</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="content-area">
+
+  {# ── Action Bar ── #}
+  <div class="action-bar">
+    <div class="action-group">
+      <a href="{% url 'recording:record_control' project.pk %}" class="md-button-filled">
+        <span class="material-symbols-outlined">fiber_manual_record</span>
+        Record
+      </a>
+      {% if videos.count >= 2 %}
+        <a href="{% url 'recording:rank_view' project.pk %}" class="md-button-tonal">
+          <span class="material-symbols-outlined">leaderboard</span>
+          Rank Videos
+        </a>
+      {% else %}
+        <button type="button" class="md-button-tonal" disabled title="Need at least 2 videos to rank">
+          <span class="material-symbols-outlined">leaderboard</span>
+          Rank Videos
+        </button>
+      {% endif %}
+      <button type="button" class="md-button-outlined" onclick="document.getElementById('video-upload-input').click();">
+        <span class="material-symbols-outlined">upload</span>
+        Upload
+      </button>
+      {% if videos %}
+        <a href="{% url 'projects:download_all' project.pk %}" class="md-button-outlined">
+          <span class="material-symbols-outlined">download</span>
+          Download All
+        </a>
+      {% else %}
+        <button type="button" class="md-button-outlined" disabled>
+          <span class="material-symbols-outlined">download</span>
+          Download All
+        </button>
+      {% endif %}
+    </div>
+    <div class="action-spacer"></div>
+    <div class="action-group">
+      <button type="button" class="md-button-text" style="color:var(--md-sys-color-error);" onclick="document.getElementById('delete-project-dialog').classList.add('open');">
+        <span class="material-symbols-outlined">delete</span>
+        Delete Project
+      </button>
+    </div>
+  </div>
+
+  {# ── Hidden Upload Form ── #}
+  <form id="video-upload-form" method="post" action="{% url 'projects:video_upload' project.pk %}" enctype="multipart/form-data" style="display:none;">
+    {% csrf_token %}
+    <input type="file" id="video-upload-input" name="file" accept="video/*" onchange="document.getElementById('video-upload-form').submit();">
+  </form>
+
+  {# ── Video Grid ── #}
+  {% if videos %}
+    <div class="video-grid">
+      {% for video in videos %}
+        <div class="video-card" data-video-id="{{ video.pk }}" data-video-url="{{ video.file.url }}" data-video-name="{{ video.filename_original|default:video.pk }}" data-video-duration="{{ video.duration_seconds|default:'--' }}" data-video-size="{{ video.file_size_bytes }}" data-video-elo="{{ video.elo_rating }}" onclick="openSidebar(this)">
+          <div class="video-thumbnail">
+            {% if video.thumbnail %}
+              <img src="{{ video.thumbnail.url }}" alt="{{ video.filename_original }}">
+            {% else %}
+              <div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; background:var(--md-sys-color-surface-container-highest);">
+                <span class="material-symbols-outlined" style="font-size:48px; color:var(--md-sys-color-on-surface-variant);">videocam</span>
+              </div>
+            {% endif %}
+            {% if video.duration_seconds %}
+              <span class="video-duration">{{ video.duration_seconds|floatformat:0 }}s</span>
+            {% endif %}
+            <div class="video-status-overlay">
+              <span class="md-badge large" style="background-color:var(--md-sys-color-primary); color:var(--md-sys-color-on-primary);">#{{ forloop.counter }}</span>
+            </div>
+          </div>
+          <div class="video-info">
+            <span class="video-title">{{ video.filename_original|default:video.pk }}</span>
+            <div class="video-meta">
+              <span>Elo: {{ video.elo_rating|floatformat:0 }}</span>
+              <span>{{ video.created_at|date:"M j, Y" }}</span>
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:4px; padding:4px 12px 12px;" onclick="event.stopPropagation();">
+            <a href="{% url 'projects:video_download' project.pk video.pk %}" class="md-icon-button" title="Download">
+              <span class="material-symbols-outlined">download</span>
+            </a>
+            <button type="button" class="md-icon-button" title="Delete" style="color:var(--md-sys-color-error);" onclick="confirmDeleteVideo('{{ video.pk }}', '{{ video.filename_original|default:video.pk|escapejs }}');">
+              <span class="material-symbols-outlined">delete</span>
+            </button>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-state-icon">
+        <span class="material-symbols-outlined">videocam</span>
+      </div>
+      <h2 class="empty-state-title">No videos recorded yet</h2>
+      <p class="empty-state-description">Click Record to get started.</p>
+      <div class="empty-state-action">
+        <a href="{% url 'recording:record_control' project.pk %}" class="md-button-filled">
+          <span class="material-symbols-outlined">fiber_manual_record</span>
+          Record
+        </a>
+      </div>
+    </div>
+  {% endif %}
+
+</div>
+
+{# ── Sidebar: Video Preview ── #}
+<div id="sidebar-overlay" class="md-sidebar-overlay" onclick="closeSidebar();"></div>
+<aside id="video-sidebar" class="md-sidebar">
+  <div class="md-sidebar-header">
+    <span class="title" id="sidebar-title">Video Preview</span>
+    <button type="button" class="md-icon-button" onclick="closeSidebar();" aria-label="Close">
+      <span class="material-symbols-outlined">close</span>
+    </button>
+  </div>
+  <div class="md-sidebar-content">
+    <video id="sidebar-player" controls style="width:100%; border-radius:var(--md-sys-shape-corner-medium); background:#000; margin-bottom:16px;"></video>
+    <div class="flex-col gap-sm">
+      <div>
+        <span class="md-label-medium text-on-surface-variant">Filename</span>
+        <p class="md-body-medium" id="sidebar-filename"></p>
+      </div>
+      <div>
+        <span class="md-label-medium text-on-surface-variant">Duration</span>
+        <p class="md-body-medium" id="sidebar-duration"></p>
+      </div>
+      <div>
+        <span class="md-label-medium text-on-surface-variant">File Size</span>
+        <p class="md-body-medium" id="sidebar-size"></p>
+      </div>
+      <div>
+        <span class="md-label-medium text-on-surface-variant">Elo Rating</span>
+        <p class="md-body-medium" id="sidebar-elo"></p>
+      </div>
+    </div>
+  </div>
+  <div class="md-sidebar-footer">
+    <a id="sidebar-download" href="#" class="md-button-outlined">
+      <span class="material-symbols-outlined">download</span>
+      Download
+    </a>
+    <button type="button" id="sidebar-delete-btn" class="md-button-text" style="color:var(--md-sys-color-error);">
+      <span class="material-symbols-outlined">delete</span>
+      Delete
+    </button>
+  </div>
+</aside>
+
+{# ── Dialog: Delete Project Confirmation ── #}
+<div id="delete-project-dialog" class="md-dialog-overlay" onclick="if(event.target===this)this.classList.remove('open');">
+  <div class="md-dialog">
+    <div class="md-dialog-icon">
+      <span class="material-symbols-outlined" style="color:var(--md-sys-color-error);">warning</span>
+    </div>
+    <h2 class="md-dialog-title">Delete Project?</h2>
+    <div class="md-dialog-content">
+      This will permanently delete <strong>{{ project.name }}</strong> and all its videos. This action cannot be undone.
+    </div>
+    <div class="md-dialog-actions">
+      <button type="button" class="md-button-text" onclick="document.getElementById('delete-project-dialog').classList.remove('open');">
+        Cancel
+      </button>
+      <form method="post" action="{% url 'projects:delete' project.pk %}" style="display:inline;">
+        {% csrf_token %}
+        <button type="submit" class="md-button-filled" style="background-color:var(--md-sys-color-error); color:var(--md-sys-color-on-error);">
+          Delete
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+
+{# ── Dialog: Delete Video Confirmation ── #}
+<div id="delete-video-dialog" class="md-dialog-overlay" onclick="if(event.target===this)this.classList.remove('open');">
+  <div class="md-dialog">
+    <div class="md-dialog-icon">
+      <span class="material-symbols-outlined" style="color:var(--md-sys-color-error);">warning</span>
+    </div>
+    <h2 class="md-dialog-title">Delete Video?</h2>
+    <div class="md-dialog-content">
+      This will permanently delete <strong id="delete-video-name"></strong>. This action cannot be undone.
+    </div>
+    <div class="md-dialog-actions">
+      <button type="button" class="md-button-text" onclick="document.getElementById('delete-video-dialog').classList.remove('open');">
+        Cancel
+      </button>
+      <form id="delete-video-form" method="post" action="" style="display:inline;">
+        {% csrf_token %}
+        <button type="submit" class="md-button-filled" style="background-color:var(--md-sys-color-error); color:var(--md-sys-color-on-error);">
+          Delete
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/video-manager.js' %}"></script>
+{% endblock %}

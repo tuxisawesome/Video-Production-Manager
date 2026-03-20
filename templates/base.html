@@ -1,0 +1,92 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>{% block title %}Video Production Manager{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/m3-tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'css/m3-components.css' %}">
+  <link rel="stylesheet" href="{% static 'css/layout.css' %}">
+  <link rel="stylesheet" href="{% static 'css/responsive.css' %}">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined">
+</head>
+<body>
+  <div class="app-shell {% block shell_class %}{% endblock %}">
+
+    {# ── Top App Bar ── #}
+    <header class="md-top-app-bar">
+      <div class="title">Video Production Manager</div>
+      <div class="trailing">
+        {% if user.is_authenticated %}
+          <span class="md-label-large" style="color: var(--md-sys-color-on-surface-variant);">
+            {{ user.username }}
+          </span>
+          {% if user.is_staff %}
+            <a href="{% url 'accounts:dashboard' %}" class="md-icon-button" aria-label="Settings">
+              <span class="material-symbols-outlined">settings</span>
+            </a>
+          {% endif %}
+          <form method="post" action="{% url 'accounts:logout' %}" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="md-button-text">Logout</button>
+          </form>
+        {% else %}
+          <a href="{% url 'accounts:login' %}" class="md-button-text">Login</a>
+        {% endif %}
+      </div>
+    </header>
+
+    {# ── Navigation Rail (authenticated users only) ── #}
+    {% if user.is_authenticated %}
+      <nav class="md-navigation-rail">
+        <a href="{% url 'projects:list' %}" class="md-navigation-rail-item {% if request.resolver_match.app_name == 'projects' %}active{% endif %}">
+          <span class="icon-container">
+            <span class="material-symbols-outlined">video_library</span>
+          </span>
+          <span class="label">Projects</span>
+        </a>
+        {% if user.is_staff %}
+          <a href="{% url 'accounts:dashboard' %}" class="md-navigation-rail-item {% if request.resolver_match.app_name == 'accounts' and request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+            <span class="icon-container">
+              <span class="material-symbols-outlined">admin_panel_settings</span>
+            </span>
+            <span class="label">Admin</span>
+          </a>
+        {% endif %}
+      </nav>
+    {% endif %}
+
+    {# ── Main Content ── #}
+    <main class="app-main">
+      {% block content %}{% endblock %}
+    </main>
+
+  </div>
+
+  {# ── Snackbar Container for Django Messages ── #}
+  {% if messages %}
+    <div id="snackbar-container">
+      {% for message in messages %}
+        <div class="md-snackbar show" role="alert" data-message-level="{{ message.tags }}">
+          <span class="md-snackbar-text">{{ message }}</span>
+          <button class="md-snackbar-action" onclick="this.parentElement.classList.remove('show');">
+            Close
+          </button>
+        </div>
+      {% endfor %}
+    </div>
+    <script>
+      // Auto-dismiss snackbars after 5 seconds
+      document.querySelectorAll('.md-snackbar.show').forEach(function(snackbar) {
+        setTimeout(function() {
+          snackbar.classList.remove('show');
+        }, 5000);
+      });
+    </script>
+  {% endif %}
+
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

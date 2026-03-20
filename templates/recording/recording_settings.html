@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Recording Settings - Video Production Manager{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Recording Settings</h1>
+    <p class="page-subtitle">Configure video and audio recording preferences.</p>
+  </div>
+</div>
+
+<div class="content-area narrow">
+
+  <form id="settings-form" onsubmit="return saveSettings(event);">
+    {% csrf_token %}
+
+    {# ── Video Settings ── #}
+    <div class="md-card-elevated" style="padding:24px; margin-bottom:24px;">
+      <h2 class="md-title-large" style="margin-bottom:20px;">
+        <span class="material-symbols-outlined" style="font-size:22px; vertical-align:middle; margin-right:8px;">videocam</span>
+        Video
+      </h2>
+
+      <div class="form-section">
+        {# Resolution #}
+        <div class="md-select">
+          <label for="id_video_resolution">Resolution</label>
+          <select id="id_video_resolution" name="video_resolution">
+            <option value="4k">4K</option>
+            <option value="1080p">1080p</option>
+            <option value="720p">720p</option>
+            <option value="480p">480p</option>
+          </select>
+        </div>
+
+        {# Frame Rate #}
+        <div class="md-select">
+          <label for="id_frame_rate">Frame Rate</label>
+          <select id="id_frame_rate" name="frame_rate">
+            <option value="60">60 fps</option>
+            <option value="30">30 fps</option>
+            <option value="24">24 fps</option>
+          </select>
+        </div>
+
+        {# Video Codec #}
+        <div class="md-select">
+          <label for="id_video_codec">Video Codec</label>
+          <select id="id_video_codec" name="video_codec">
+            <option value="vp9">VP9</option>
+            <option value="vp8">VP8</option>
+            <option value="h264">H.264</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    {# ── Audio Settings ── #}
+    <div class="md-card-elevated" style="padding:24px; margin-bottom:24px;">
+      <h2 class="md-title-large" style="margin-bottom:20px;">
+        <span class="material-symbols-outlined" style="font-size:22px; vertical-align:middle; margin-right:8px;">mic</span>
+        Audio
+      </h2>
+
+      <div class="form-section">
+        {# Audio Enabled #}
+        <div class="flex items-center justify-between">
+          <div>
+            <span class="md-label-large">Audio Enabled</span>
+            <p class="md-body-small text-on-surface-variant">Record audio alongside video</p>
+          </div>
+          <label class="md-switch">
+            <input type="checkbox" id="id_audio_enabled" name="audio_enabled" checked>
+            <span class="md-switch-track"></span>
+            <span class="md-switch-thumb"></span>
+          </label>
+        </div>
+
+        {# Audio Codec #}
+        <div class="md-select">
+          <label for="id_audio_codec">Audio Codec</label>
+          <select id="id_audio_codec" name="audio_codec">
+            <option value="opus">Opus</option>
+            <option value="aac">AAC</option>
+          </select>
+        </div>
+
+        {# Audio Bitrate #}
+        <div class="md-select">
+          <label for="id_audio_bitrate">Audio Bitrate</label>
+          <select id="id_audio_bitrate" name="audio_bitrate">
+            <option value="128">128 kbps</option>
+            <option value="192">192 kbps</option>
+            <option value="256">256 kbps</option>
+            <option value="320">320 kbps</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    {# ── Save Button ── #}
+    <div class="form-actions" style="border-top:none; padding-top:0;">
+      <span id="save-status" class="md-body-medium text-on-surface-variant" style="margin-right:auto;"></span>
+      <button type="submit" class="md-button-filled" id="save-btn">
+        <span class="material-symbols-outlined">save</span>
+        Save Settings
+      </button>
+    </div>
+  </form>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  var settingsUrl = '{% url "recording:recording_settings_view" %}';
+  var csrfToken = '{{ csrf_token }}';
+
+  /* ── Load current settings on page load ── */
+  document.addEventListener('DOMContentLoaded', function() {
+    fetch(settingsUrl, {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      document.getElementById('id_video_resolution').value = data.video_resolution;
+      document.getElementById('id_frame_rate').value = String(data.frame_rate);
+      document.getElementById('id_video_codec').value = data.video_codec;
+      document.getElementById('id_audio_enabled').checked = data.audio_enabled;
+      document.getElementById('id_audio_codec').value = data.audio_codec;
+      document.getElementById('id_audio_bitrate').value = String(data.audio_bitrate);
+    })
+    .catch(function(err) {
+      console.error('Failed to load settings:', err);
+    });
+  });
+
+  /* ── Save settings ── */
+  function saveSettings(e) {
+    e.preventDefault();
+    var statusEl = document.getElementById('save-status');
+    var btn = document.getElementById('save-btn');
+    btn.disabled = true;
+    statusEl.textContent = 'Saving...';
+
+    var payload = {
+      video_resolution: document.getElementById('id_video_resolution').value,
+      frame_rate: parseInt(document.getElementById('id_frame_rate').value, 10),
+      video_codec: document.getElementById('id_video_codec').value,
+      audio_enabled: document.getElementById('id_audio_enabled').checked,
+      audio_codec: document.getElementById('id_audio_codec').value,
+      audio_bitrate: parseInt(document.getElementById('id_audio_bitrate').value, 10)
+    };
+
+    fetch(settingsUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken,
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: JSON.stringify(payload)
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.success) {
+        statusEl.textContent = 'Settings saved.';
+        statusEl.style.color = 'var(--md-sys-color-success)';
+      } else {
+        statusEl.textContent = 'Error saving settings.';
+        statusEl.style.color = 'var(--md-sys-color-error)';
+      }
+      btn.disabled = false;
+      setTimeout(function() {
+        statusEl.textContent = '';
+        statusEl.style.color = '';
+      }, 3000);
+    })
+    .catch(function(err) {
+      statusEl.textContent = 'Network error.';
+      statusEl.style.color = 'var(--md-sys-color-error)';
+      btn.disabled = false;
+      console.error('Save error:', err);
+    });
+
+    return false;
+  }
+</script>
+{% endblock %}

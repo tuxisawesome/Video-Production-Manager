@@ -1,0 +1,18 @@
+[Unit]
+Description=VPM Daphne WebSocket Server
+After=network.target redis.service
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/vpm
+ExecStart=/var/www/vpm/venv/bin/daphne vpm.asgi:application \
+    --bind 127.0.0.1 \
+    --port 8001 \
+    --verbosity 1
+Restart=always
+RestartSec=3
+Environment="DJANGO_SETTINGS_MODULE=vpm.settings"
+
+[Install]
+WantedBy=multi-user.target

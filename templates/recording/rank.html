@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Rank Videos - {{ project.name }} - Video Production Manager{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <a href="{% url 'projects:detail' project.pk %}" class="md-body-medium" style="display:inline-flex; align-items:center; gap:4px; margin-bottom:4px; color:var(--md-sys-color-primary);">
+      <span class="material-symbols-outlined" style="font-size:18px;">arrow_back</span>
+      {{ project.name }}
+    </a>
+    <h1 class="page-title">Rank Videos - {{ project.name }}</h1>
+  </div>
+</div>
+
+<div class="content-area">
+
+  {# ── Progress Bar ── #}
+  <div style="margin-bottom:24px;">
+    <div class="flex items-center justify-between" style="margin-bottom:8px;">
+      <span class="md-label-medium text-on-surface-variant">Comparisons completed</span>
+      <span class="md-label-medium text-on-surface-variant">
+        <span id="progress-done">{{ progress.completed }}</span> / <span id="progress-total">{{ progress.total }}</span>
+      </span>
+    </div>
+    <div class="md-progress-linear">
+      <div class="md-progress-linear-indicator" id="progress-bar" style="width:{{ progress.percent }}%;"></div>
+    </div>
+  </div>
+
+  {# ── Comparison Area ── #}
+  <div id="comparison-area">
+
+    {# Two-panel video comparison #}
+    <div id="comparison-panels" class="two-panel">
+      <div class="panel">
+        <div class="md-card-elevated" style="overflow:hidden;">
+          <video id="video-left" controls style="width:100%; aspect-ratio:16/9; background:#000; display:block;"></video>
+          <div style="padding:12px 16px;">
+            <p class="md-title-small" id="name-left">--</p>
+            <p class="md-body-small text-on-surface-variant" id="elo-left">Elo: --</p>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="md-card-elevated" style="overflow:hidden;">
+          <video id="video-right" controls style="width:100%; aspect-ratio:16/9; background:#000; display:block;"></video>
+          <div style="padding:12px 16px;">
+            <p class="md-title-small" id="name-right">--</p>
+            <p class="md-body-small text-on-surface-variant" id="elo-right">Elo: --</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# Action buttons #}
+    <div style="display:flex; align-items:center; justify-content:center; gap:16px; padding:24px 0;">
+      <button type="button" class="md-button-tonal" id="btn-left-wins" onclick="submitResult('left')">
+        <span class="material-symbols-outlined">arrow_back</span>
+        Left is Better
+      </button>
+      <button type="button" class="md-button-outlined" id="btn-equal" onclick="submitResult('equal')">
+        Equal
+      </button>
+      <button type="button" class="md-button-tonal" id="btn-right-wins" onclick="submitResult('right')">
+        Right is Better
+        <span class="material-symbols-outlined">arrow_forward</span>
+      </button>
+    </div>
+
+    {# Keyboard shortcut hints #}
+    <div style="text-align:center; margin-bottom:16px;">
+      <span class="md-body-small text-on-surface-variant">
+        Keyboard shortcuts:
+        <kbd style="padding:2px 8px; border-radius:var(--md-sys-shape-corner-extra-small); background:var(--md-sys-color-surface-container-highest); font-family:monospace; font-size:12px;">&larr;</kbd> Left wins
+        &nbsp;&middot;&nbsp;
+        <kbd style="padding:2px 8px; border-radius:var(--md-sys-shape-corner-extra-small); background:var(--md-sys-color-surface-container-highest); font-family:monospace; font-size:12px;">&uarr;</kbd><kbd style="padding:2px 8px; border-radius:var(--md-sys-shape-corner-extra-small); background:var(--md-sys-color-surface-container-highest); font-family:monospace; font-size:12px;">&darr;</kbd> Equal
+        &nbsp;&middot;&nbsp;
+        <kbd style="padding:2px 8px; border-radius:var(--md-sys-shape-corner-extra-small); background:var(--md-sys-color-surface-container-highest); font-family:monospace; font-size:12px;">&rarr;</kbd> Right wins
+      </span>
+    </div>
+  </div>
+
+  {# ── Completion State ── #}
+  <div id="completion-area" class="empty-state" style="display:none;">
+    <div class="empty-state-icon" style="background-color:var(--md-sys-color-success-container); color:var(--md-sys-color-on-success-container);">
+      <span class="material-symbols-outlined">check_circle</span>
+    </div>
+    <h2 class="empty-state-title">All comparisons complete!</h2>
+    <p class="empty-state-description">Your videos have been ranked based on your preferences. View the results on the project page.</p>
+    <div class="empty-state-action">
+      <a href="{% url 'projects:detail' project.pk %}" class="md-button-filled">
+        <span class="material-symbols-outlined">arrow_back</span>
+        Back to Project
+      </a>
+    </div>
+  </div>
+
+</div>
+
+{# ── Data for JavaScript ── #}
+<script id="page-data" type="application/json">
+{
+  "project_id": "{{ project.pk }}",
+  "next_pair_url": "{% url 'recording:next_pair' project.pk %}",
+  "submit_url": "{% url 'recording:submit_comparison' project.pk %}",
+  "csrf_token": "{{ csrf_token }}"
+}
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/ranking.js' %}"></script>
+{% endblock %}

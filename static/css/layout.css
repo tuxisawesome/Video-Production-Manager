@@ -125,6 +125,44 @@
   gap: 20px;
 }
 
+/* Admin dashboard grid */
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 20px;
+}
+
+/* Table container: always allow horizontal scroll */
+.md-table-container {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Compact input for inline table editing */
+.admin-compact-input {
+  width: 90px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: var(--md-sys-shape-corner-extra-small);
+  background-color: var(--md-sys-color-surface-container);
+  color: var(--md-sys-color-on-surface);
+  font-family: var(--md-sys-typescale-font-family);
+  font-size: var(--md-sys-typescale-body-medium-size);
+  transition: border-color var(--md-sys-motion-transition-standard);
+}
+
+.admin-compact-input:hover {
+  border-color: var(--md-sys-color-on-surface);
+}
+
+.admin-compact-input:focus {
+  outline: none;
+  border-color: var(--md-sys-color-primary);
+  border-width: 2px;
+  padding: 0 9px;
+}
+
 /* ==========================================================================
    VIDEO GRID
    Specific grid for video thumbnails / video cards

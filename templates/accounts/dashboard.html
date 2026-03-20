@@ -8,19 +8,20 @@
 </div>
 
 <div class="content-area">
-  <div class="grid-container wide-cards">
+  <div class="admin-grid">
 
-    {# ════════════════════════════════════════════════════════════════════
-       Section A: Site Settings
-       ════════════════════════════════════════════════════════════════════ #}
+    <!-- Site Settings -->
     <div class="md-card-elevated" style="padding:24px;">
-      <h2 class="md-title-large" style="margin-bottom:20px;">Site Settings</h2>
+      <h2 class="md-title-large" style="margin-bottom:20px;">
+        <span class="material-symbols-outlined" style="font-size:22px; vertical-align:middle; margin-right:8px;">tune</span>
+        Site Settings
+      </h2>
 
       <form method="post" action="{% url 'accounts:site_settings' %}">
         {% csrf_token %}
 
         <div class="form-section">
-          <p class="md-body-medium text-on-surface-variant">
+          <p class="md-body-medium text-on-surface-variant" style="margin-top:0;">
             Current value: <strong>{{ site_settings.max_recordings_per_project }}</strong>
             {% if site_settings.max_recordings_per_project == 0 %}(Unlimited){% endif %}
           </p>
@@ -45,23 +46,26 @@
             <span class="md-supporting-text">0 means unlimited</span>
           </div>
 
-          <div class="form-actions">
-            <button type="submit" class="md-button-filled">Save Settings</button>
+          <div class="form-actions" style="border-top:none; padding-top:8px;">
+            <button type="submit" class="md-button-filled">
+              <span class="material-symbols-outlined">save</span>
+              Save Settings
+            </button>
           </div>
         </div>
       </form>
     </div>
 
-    {# ════════════════════════════════════════════════════════════════════
-       Section B: Create User
-       ════════════════════════════════════════════════════════════════════ #}
+    <!-- Create User -->
     <div class="md-card-elevated" style="padding:24px;">
-      <h2 class="md-title-large" style="margin-bottom:20px;">Create User</h2>
+      <h2 class="md-title-large" style="margin-bottom:20px;">
+        <span class="material-symbols-outlined" style="font-size:22px; vertical-align:middle; margin-right:8px;">person_add</span>
+        Create User
+      </h2>
 
       <form method="post" action="{% url 'accounts:create_user' %}">
         {% csrf_token %}
 
-        {# Non-field errors #}
         {% if create_user_form.non_field_errors %}
           <div style="margin-bottom:16px; padding:12px 16px; border-radius:var(--md-sys-shape-corner-small); background-color:var(--md-sys-color-error-container); color:var(--md-sys-color-on-error-container);">
             {% for error in create_user_form.non_field_errors %}
@@ -71,7 +75,6 @@
         {% endif %}
 
         <div class="form-section">
-          {# Username #}
           <div class="md-text-field {% if create_user_form.username.errors %}error{% endif %}">
             <div class="md-text-field-container">
               <input
@@ -91,7 +94,6 @@
             {% endif %}
           </div>
 
-          {# Email #}
           <div class="md-text-field {% if create_user_form.email.errors %}error{% endif %}">
             <div class="md-text-field-container">
               <input
@@ -110,7 +112,6 @@
             {% endif %}
           </div>
 
-          {# Password #}
           <div class="md-text-field {% if create_user_form.password1.errors %}error{% endif %}">
             <div class="md-text-field-container">
               <input
@@ -129,7 +130,6 @@
             {% endif %}
           </div>
 
-          {# Confirm Password #}
           <div class="md-text-field {% if create_user_form.password2.errors %}error{% endif %}">
             <div class="md-text-field-container">
               <input
@@ -148,7 +148,6 @@
             {% endif %}
           </div>
 
-          {# Max Recording Seconds #}
           <div class="md-text-field {% if create_user_form.max_recording_seconds.errors %}error{% endif %}">
             <div class="md-text-field-container">
               <input
@@ -169,8 +168,11 @@
             <span class="md-supporting-text">0 means unlimited</span>
           </div>
 
-          <div class="form-actions">
-            <button type="submit" class="md-button-filled">Create User</button>
+          <div class="form-actions" style="border-top:none; padding-top:8px;">
+            <button type="submit" class="md-button-filled">
+              <span class="material-symbols-outlined">person_add</span>
+              Create User
+            </button>
           </div>
         </div>
       </form>
@@ -178,11 +180,12 @@
 
   </div>
 
-  {# ════════════════════════════════════════════════════════════════════
-     Section C: Users Table
-     ════════════════════════════════════════════════════════════════════ #}
-  <div class="md-card-elevated mt-lg" style="padding:24px;">
-    <h2 class="md-title-large" style="margin-bottom:20px;">Users</h2>
+  <!-- Users Table -->
+  <div class="md-card-elevated" style="padding:24px; margin-top:24px;">
+    <h2 class="md-title-large" style="margin-bottom:20px;">
+      <span class="material-symbols-outlined" style="font-size:22px; vertical-align:middle; margin-right:8px;">group</span>
+      Users
+    </h2>
 
     <div class="md-table-container">
       <table class="md-table">
@@ -191,7 +194,7 @@
             <th>Username</th>
             <th>Email</th>
             <th>Max Recording Time</th>
-            <th>Active</th>
+            <th>Status</th>
             <th>Created By</th>
             <th>Actions</th>
           </tr>
@@ -199,38 +202,36 @@
         <tbody>
           {% for u in users %}
             <tr>
-              <td>{{ u.username }}</td>
+              <td>
+                <span class="md-label-large">{{ u.username }}</span>
+              </td>
               <td>{{ u.email|default:"&mdash;" }}</td>
               <td>{{ u.max_recording_seconds_display }}</td>
               <td>
                 {% if u.is_active %}
-                  <span class="md-label-medium" style="color:var(--md-sys-color-success);">Active</span>
+                  <span class="md-chip" style="--chip-bg:var(--md-sys-color-success-container); --chip-color:var(--md-sys-color-on-success-container); background:var(--md-sys-color-success-container); color:var(--md-sys-color-on-success-container);">Active</span>
                 {% else %}
-                  <span class="md-label-medium" style="color:var(--md-sys-color-error);">Inactive</span>
+                  <span class="md-chip" style="--chip-bg:var(--md-sys-color-error-container); --chip-color:var(--md-sys-color-on-error-container); background:var(--md-sys-color-error-container); color:var(--md-sys-color-on-error-container);">Inactive</span>
                 {% endif %}
               </td>
               <td>{{ u.created_by.username|default:"&mdash;" }}</td>
               <td>
-                <form method="post" action="{% url 'accounts:edit_user' u.id %}" class="form-inline">
+                <form method="post" action="{% url 'accounts:edit_user' u.id %}" style="display:flex; align-items:center; gap:10px; flex-wrap:nowrap;">
                   {% csrf_token %}
-                  <div class="md-text-field" style="min-width:120px; max-width:160px;">
-                    <div class="md-text-field-container">
-                      <input
-                        type="number"
-                        name="max_recording_seconds"
-                        value="{{ u.max_recording_seconds }}"
-                        min="0"
-                        placeholder=" "
-                      >
-                      <label>Seconds</label>
-                    </div>
-                  </div>
+                  <input
+                    type="number"
+                    name="max_recording_seconds"
+                    value="{{ u.max_recording_seconds }}"
+                    min="0"
+                    class="admin-compact-input"
+                    title="Max recording seconds"
+                  >
                   <label class="md-switch" title="Active">
                     <input type="checkbox" name="is_active" {% if u.is_active %}checked{% endif %}>
                     <span class="md-switch-track"></span>
                     <span class="md-switch-thumb"></span>
                   </label>
-                  <button type="submit" class="md-button-tonal">Save</button>
+                  <button type="submit" class="md-button-tonal" style="white-space:nowrap;">Save</button>
                 </form>
               </td>
             </tr>

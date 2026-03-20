@@ -63,7 +63,8 @@
   /* Grids: single column */
   .grid-container,
   .grid-container.compact,
-  .grid-container.wide-cards {
+  .grid-container.wide-cards,
+  .admin-grid {
     grid-template-columns: 1fr;
     gap: 12px;
   }

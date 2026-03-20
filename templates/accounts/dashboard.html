@@ -178,6 +178,44 @@
       </form>
     </div>
 
+    <!-- Data Migration -->
+    <div class="md-card-elevated" style="padding:24px;">
+      <h2 class="md-title-large" style="margin-bottom:20px;">
+        <span class="material-symbols-outlined" style="font-size:22px; vertical-align:middle; margin-right:8px;">swap_horiz</span>
+        Data Migration
+      </h2>
+
+      <div class="form-section">
+        <p class="md-body-medium text-on-surface-variant" style="margin-top:0;">
+          Export all data and media for server migration, or import from a previous export.
+        </p>
+
+        <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start;">
+          <a href="{% url 'accounts:export_data' %}" class="md-button-filled">
+            <span class="material-symbols-outlined">download</span>
+            Export All Data
+          </a>
+        </div>
+
+        <hr class="md-divider" style="margin:16px 0;">
+
+        <form method="post" action="{% url 'accounts:import_data' %}" enctype="multipart/form-data"
+              style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+          {% csrf_token %}
+          <input type="file" name="archive" accept=".zip" required
+                 class="admin-compact-input" style="width:auto; height:auto; padding:8px;">
+          <button type="submit" class="md-button-tonal">
+            <span class="material-symbols-outlined">upload</span>
+            Import
+          </button>
+        </form>
+
+        <p class="md-body-small text-on-surface-variant" style="margin-top:12px; margin-bottom:0;">
+          Import merges data into the current database. Existing records with matching IDs are skipped.
+        </p>
+      </div>
+    </div>
+
   </div>
 
   <!-- Users Table -->

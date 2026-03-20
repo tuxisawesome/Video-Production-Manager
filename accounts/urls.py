@@ -11,4 +11,6 @@ urlpatterns = [
     path("dashboard/create-user/", views.create_user_view, name="create_user"),
     path("dashboard/settings/", views.site_settings_view, name="site_settings"),
     path("dashboard/user/<int:user_id>/", views.edit_user_view, name="edit_user"),
+    path("dashboard/export/", views.export_data_view, name="export_data"),
+    path("dashboard/import/", views.import_data_view, name="import_data"),
 ]

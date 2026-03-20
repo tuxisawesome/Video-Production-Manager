@@ -1,8 +1,18 @@
+import tempfile
+
 from django.contrib import messages
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.contrib.auth.decorators import login_required, user_passes_test
+from django.http import StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 
+from .export_import import (
+    ExportStreamer,
+    collect_media_files,
+    export_data_files,
+    import_from_zip,
+)
 from .forms import CreateUserForm, EditUserForm, LoginForm, SiteSettingsForm
 from .models import SiteSettings
 
@@ -140,5 +150,58 @@ def site_settings_view(request):
         for field, errors in form.errors.items():
             for error in errors:
                 messages.error(request, f"{field}: {error}")
+
+    return redirect("accounts:dashboard")
+
+
+# ---------------------------------------------------------------------------
+# Export / Import
+# ---------------------------------------------------------------------------
+
+
+@login_required
+@user_passes_test(is_staff, login_url="/accounts/login/")
+def export_data_view(request):
+    """Stream a zip archive containing all data and media files."""
+    streamer = ExportStreamer()
+    json_entries = list(export_data_files())
+    media_entries = collect_media_files()
+
+    response = StreamingHttpResponse(
+        streamer.stream_export(json_entries, media_entries),
+        content_type="application/zip",
+    )
+    timestamp = timezone.now().strftime("%Y%m%d_%H%M%S")
+    response["Content-Disposition"] = f'attachment; filename="vpm-export-{timestamp}.zip"'
+    return response
+
+
+@login_required
+@user_passes_test(is_staff, login_url="/accounts/login/")
+def import_data_view(request):
+    """Accept an export zip and restore all data and media."""
+    if request.method != "POST":
+        return redirect("accounts:dashboard")
+
+    archive = request.FILES.get("archive")
+    if not archive:
+        messages.error(request, "No file uploaded.")
+        return redirect("accounts:dashboard")
+
+    # Get a seekable file path for zipfile
+    if hasattr(archive, "temporary_file_path"):
+        zip_path = archive.temporary_file_path()
+    else:
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+        for chunk in archive.chunks():
+            tmp.write(chunk)
+        tmp.close()
+        zip_path = tmp.name
+
+    try:
+        stats = import_from_zip(zip_path)
+        messages.success(request, f"Import complete: {stats}.")
+    except Exception as e:
+        messages.error(request, f"Import failed: {e}")
 
     return redirect("accounts:dashboard")

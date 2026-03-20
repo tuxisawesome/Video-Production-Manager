@@ -179,6 +179,50 @@ def edit_user_view(request, user_id):
 
 @login_required
 @user_passes_test(is_staff, login_url="/accounts/login/")
+def delete_user_view(request, user_id):
+    """Staff-only view to delete a user account."""
+    if request.method != "POST":
+        return redirect("accounts:dashboard")
+
+    user = get_object_or_404(User, pk=user_id)
+
+    # Prevent deleting yourself
+    if user == request.user:
+        messages.error(request, "You cannot delete your own account.")
+        return redirect("accounts:dashboard")
+
+    username = user.username
+    user.delete()
+    messages.success(request, f'User "{username}" has been deleted.')
+    return redirect("accounts:dashboard")
+
+
+@login_required
+@user_passes_test(is_staff, login_url="/accounts/login/")
+def reset_password_view(request, user_id):
+    """Staff-only view to reset a user's password."""
+    if request.method != "POST":
+        return redirect("accounts:dashboard")
+
+    user = get_object_or_404(User, pk=user_id)
+    new_password = request.POST.get("new_password", "").strip()
+
+    if not new_password:
+        messages.error(request, "Password cannot be empty.")
+        return redirect("accounts:dashboard")
+
+    if len(new_password) < 6:
+        messages.error(request, "Password must be at least 6 characters.")
+        return redirect("accounts:dashboard")
+
+    user.set_password(new_password)
+    user.save()
+    messages.success(request, f'Password for "{user.username}" has been reset.')
+    return redirect("accounts:dashboard")
+
+
+@login_required
+@user_passes_test(is_staff, login_url="/accounts/login/")
 def site_settings_view(request):
     """Staff-only view to update site-wide settings."""
     if request.method != "POST":

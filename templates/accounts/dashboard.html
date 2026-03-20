@@ -287,23 +287,49 @@
               </td>
               <td>{{ u.created_by.username|default:"&mdash;" }}</td>
               <td>
-                <form method="post" action="{% url 'accounts:edit_user' u.id %}" style="display:flex; align-items:center; gap:10px; flex-wrap:nowrap;">
-                  {% csrf_token %}
-                  <input
-                    type="number"
-                    name="max_recording_seconds"
-                    value="{{ u.max_recording_seconds }}"
-                    min="0"
-                    class="admin-compact-input"
-                    title="Max recording seconds"
-                  >
-                  <label class="md-switch" title="Active">
-                    <input type="checkbox" name="is_active" {% if u.is_active %}checked{% endif %}>
-                    <span class="md-switch-track"></span>
-                    <span class="md-switch-thumb"></span>
-                  </label>
-                  <button type="submit" class="md-button-tonal" style="white-space:nowrap;">Save</button>
-                </form>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                  <!-- Edit row -->
+                  <form method="post" action="{% url 'accounts:edit_user' u.id %}" style="display:flex; align-items:center; gap:10px; flex-wrap:nowrap;">
+                    {% csrf_token %}
+                    <input
+                      type="number"
+                      name="max_recording_seconds"
+                      value="{{ u.max_recording_seconds }}"
+                      min="0"
+                      class="admin-compact-input"
+                      title="Max recording seconds"
+                    >
+                    <label class="md-switch" title="Active">
+                      <input type="checkbox" name="is_active" {% if u.is_active %}checked{% endif %}>
+                      <span class="md-switch-track"></span>
+                      <span class="md-switch-thumb"></span>
+                    </label>
+                    <button type="submit" class="md-button-tonal" style="white-space:nowrap;">Save</button>
+                  </form>
+                  <!-- Reset Password / Delete row -->
+                  <div style="display:flex; align-items:center; gap:8px; flex-wrap:nowrap;">
+                    <form method="post" action="{% url 'accounts:reset_password' u.id %}" style="display:flex; align-items:center; gap:6px; flex-wrap:nowrap;"
+                          onsubmit="return confirm('Reset password for {{ u.username }}?');">
+                      {% csrf_token %}
+                      <input type="password" name="new_password" placeholder="New password" required minlength="6"
+                             class="admin-compact-input" style="width:120px;" autocomplete="new-password">
+                      <button type="submit" class="md-button-tonal" style="white-space:nowrap; font-size:13px;">
+                        <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">key</span>
+                        Reset
+                      </button>
+                    </form>
+                    {% if u != request.user %}
+                    <form method="post" action="{% url 'accounts:delete_user' u.id %}"
+                          onsubmit="return confirm('Permanently delete user {{ u.username }}? This cannot be undone.');">
+                      {% csrf_token %}
+                      <button type="submit" class="md-button-tonal" style="white-space:nowrap; font-size:13px; color:var(--md-sys-color-error);">
+                        <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">delete</span>
+                        Delete
+                      </button>
+                    </form>
+                    {% endif %}
+                  </div>
+                </div>
               </td>
             </tr>
           {% empty %}

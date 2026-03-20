@@ -21,6 +21,9 @@ const dom = {
     settingsSummary: document.querySelector('#settings-summary'),
     keybindStartStop: document.querySelector('#keybind-start-stop'),
     keybindDiscard:  document.querySelector('#keybind-discard'),
+    btnStartStop:    document.querySelector('#btn-start-stop'),
+    btnStartStopLabel: document.querySelector('#btn-start-stop-label'),
+    btnDiscard:      document.querySelector('#btn-discard'),
 };
 
 // ---------------------------------------------------------------------------
@@ -168,6 +171,25 @@ function updateKeybindLabels() {
     }
     if (dom.keybindDiscard) {
         dom.keybindDiscard.textContent = formatKeyName(keybinds.discard_key);
+    }
+}
+
+function updateControlButtons() {
+    if (!dom.btnStartStop) return;
+
+    dom.btnStartStop.disabled = !isPhoneConnected;
+    dom.btnDiscard.disabled = !isPhoneConnected || !isRecording;
+
+    if (isRecording) {
+        dom.btnStartStopLabel.textContent = 'Stop Recording';
+        dom.btnStartStop.querySelector('.material-symbols-outlined').textContent = 'stop';
+        dom.btnStartStop.className = 'md-button-filled';
+        dom.btnStartStop.style.cssText = 'flex:1; justify-content:center; background:var(--md-sys-color-error); color:var(--md-sys-color-on-error);';
+    } else {
+        dom.btnStartStopLabel.textContent = 'Start Recording';
+        dom.btnStartStop.querySelector('.material-symbols-outlined').textContent = 'fiber_manual_record';
+        dom.btnStartStop.className = 'md-button-filled';
+        dom.btnStartStop.style.cssText = 'flex:1; justify-content:center;';
     }
 }
 
@@ -331,6 +353,7 @@ function handleStatusUpdate(status, data) {
         default:
             console.warn('[WS] Unknown status:', status, data);
     }
+    updateControlButtons();
 }
 
 // ---------------------------------------------------------------------------
@@ -524,6 +547,28 @@ function cleanup() {
 document.addEventListener('keydown', onKeyDown);
 
 window.addEventListener('beforeunload', cleanup);
+
+// Control button click handlers.
+if (dom.btnStartStop) {
+    dom.btnStartStop.addEventListener('click', () => {
+        if (!isPhoneConnected) return;
+        if (isRecording) {
+            wsSend({ type: 'stop_recording' });
+        } else {
+            wsSend({ type: 'start_recording', data: recordingSettings });
+        }
+    });
+}
+if (dom.btnDiscard) {
+    dom.btnDiscard.addEventListener('click', () => {
+        if (!isPhoneConnected || !isRecording) return;
+        wsSend({ type: 'discard_recording' });
+    });
+}
+
+// Ensure the page has focus so keyboard shortcuts work (Safari fix).
+document.body.setAttribute('tabindex', '-1');
+document.body.focus();
 
 // Fetch preferences and start session in parallel.
 fetchKeybinds();

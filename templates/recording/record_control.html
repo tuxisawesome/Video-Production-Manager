@@ -69,6 +69,18 @@
         </span>
       </div>
 
+      {# Control buttons #}
+      <div id="control-buttons" style="display:flex; gap:12px; justify-content:center; margin-bottom:24px;">
+        <button id="btn-start-stop" class="md-button-filled" style="flex:1; justify-content:center;" disabled>
+          <span class="material-symbols-outlined">fiber_manual_record</span>
+          <span id="btn-start-stop-label">Start Recording</span>
+        </button>
+        <button id="btn-discard" class="md-button-outlined" style="justify-content:center;" disabled>
+          <span class="material-symbols-outlined">delete</span>
+          Discard
+        </button>
+      </div>
+
       <hr class="md-divider" style="margin-bottom:16px;">
 
       {# Keybind hints #}

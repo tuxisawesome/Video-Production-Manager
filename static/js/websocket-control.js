@@ -409,6 +409,8 @@ function matchesKeybind(event, keybindCode) {
 }
 
 function onKeyDown(event) {
+    console.log('[KeyDown]', event.code, event.key, 'target:', event.target.tagName, 'phone:', isPhoneConnected, 'ws:', ws && ws.readyState);
+
     // Ignore keybinds when focused on form elements.
     const tag = event.target.tagName.toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select' || event.target.isContentEditable) {

@@ -215,7 +215,7 @@ fi
 # --- 2.6: Django setup ---
 echo -e "${GREEN}[Step 6/10] Running Django setup...${NC}"
 python manage.py migrate --noinput
-python manage.py collectstatic --noinput -q
+python manage.py collectstatic --noinput --verbosity 0
 
 # Create superuser
 python manage.py shell -c "

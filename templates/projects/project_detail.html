@@ -72,7 +72,7 @@
   {% if videos %}
     <div class="video-grid">
       {% for video in videos %}
-        <div class="video-card" data-video-id="{{ video.pk }}" data-video-url="{{ video.file.url }}" data-video-name="{{ video.filename_original|default:video.pk }}" data-video-duration="{{ video.duration_seconds|default:'--' }}" data-video-size="{{ video.file_size_bytes }}" data-video-elo="{{ video.elo_rating }}" onclick="openSidebar(this)">
+        <div class="video-card" data-video-id="{{ video.pk }}" data-video-url="{% url 'projects:video_stream' video.project_id video.pk %}" data-video-name="{{ video.filename_original|default:video.pk }}" data-video-duration="{{ video.duration_seconds|default:'--' }}" data-video-size="{{ video.file_size_bytes }}" data-video-elo="{{ video.elo_rating }}" onclick="openSidebar(this)">
           <div class="video-thumbnail">
             {% if video.thumbnail %}
               <img src="{{ video.thumbnail.url }}" alt="{{ video.filename_original }}">

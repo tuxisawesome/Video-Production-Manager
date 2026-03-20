@@ -160,6 +160,35 @@ def video_delete(request, pk, video_id):
 
 
 @login_required
+def video_stream(request, pk, video_id):
+    """
+    Serve a video file for inline playback (no Content-Disposition: attachment).
+
+    In DEBUG mode, use Django's FileResponse directly.
+    In production, use X-Accel-Redirect to let nginx serve the file.
+    """
+    project = get_object_or_404(Project, pk=pk, owner=request.user)
+    video = get_object_or_404(Video, pk=video_id, project=project)
+
+    if not video.file:
+        raise Http404("Video file not found.")
+
+    if settings.DEBUG:
+        file_path = video.file.path
+        if not os.path.isfile(file_path):
+            raise Http404("Video file not found on disk.")
+        return FileResponse(
+            open(file_path, "rb"),
+            content_type="video/webm",
+        )
+    else:
+        response = HttpResponse()
+        response["Content-Type"] = "video/webm"
+        response["X-Accel-Redirect"] = f"/protected-media/{video.file.name}"
+        return response
+
+
+@login_required
 def video_download(request, pk, video_id):
     """
     Serve a video file for download.

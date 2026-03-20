@@ -19,6 +19,7 @@ from recording.models import (
     RecordingSession,
     RecordingSettings,
 )
+from django.urls import reverse
 from recording.ranking import get_ranking_progress, select_next_pair, update_elo
 
 
@@ -205,13 +206,13 @@ def next_pair(request, project_id):
         'complete': False,
         'video_left': {
             'id': str(video_a.id),
-            'url': video_a.file.url,
+            'url': reverse('projects:video_stream', args=[project_id, video_a.id]),
             'name': video_a.filename_original or str(video_a.id),
             'elo': round(video_a.elo_rating, 1),
         },
         'video_right': {
             'id': str(video_b.id),
-            'url': video_b.file.url,
+            'url': reverse('projects:video_stream', args=[project_id, video_b.id]),
             'name': video_b.filename_original or str(video_b.id),
             'elo': round(video_b.elo_rating, 1),
         },

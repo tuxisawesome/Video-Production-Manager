@@ -16,6 +16,11 @@ urlpatterns = [
         name="video_delete",
     ),
     path(
+        "<uuid:pk>/videos/<uuid:video_id>/stream/",
+        views.video_stream,
+        name="video_stream",
+    ),
+    path(
         "<uuid:pk>/videos/<uuid:video_id>/download/",
         views.video_download,
         name="video_download",

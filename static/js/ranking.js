@@ -153,6 +153,9 @@ async function submitResult(result) {
         dom.videoLeft.pause();
         dom.videoRight.pause();
 
+        // Reset loading state so fetchNextPair can proceed
+        isLoading = false;
+
         // Fetch the next pair
         await fetchNextPair();
     } catch (err) {

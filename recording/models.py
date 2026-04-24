@@ -67,7 +67,9 @@ class Comparison(models.Model):
     result = models.CharField(max_length=5, choices=RESULT_CHOICES)
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='comparisons',
     )
     created_at = models.DateTimeField(auto_now_add=True)

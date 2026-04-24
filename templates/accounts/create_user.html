@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}Create User - Administration{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <a href="{% url 'accounts:dashboard' %}" class="md-body-medium"
+       style="display:inline-flex; align-items:center; gap:4px; margin-bottom:4px; color:var(--md-sys-color-primary);">
+      <span class="material-symbols-outlined" style="font-size:18px;">arrow_back</span>
+      Administration
+    </a>
+    <h1 class="page-title">Create User</h1>
+  </div>
+</div>
+
+<div class="content-area" style="max-width:560px;">
+  <div class="md-card-elevated" style="padding:32px;">
+
+    {% if form.non_field_errors %}
+      <div style="margin-bottom:20px; padding:12px 16px; border-radius:var(--md-sys-shape-corner-small);
+                  background-color:var(--md-sys-color-error-container); color:var(--md-sys-color-on-error-container);">
+        {% for error in form.non_field_errors %}
+          <p class="md-body-medium" style="margin:0;">{{ error }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <form method="post" action="{% url 'accounts:create_user' %}">
+      {% csrf_token %}
+
+      <div class="form-section">
+
+        <div class="md-text-field {% if form.username.errors %}error{% endif %}">
+          <div class="md-text-field-container">
+            <input type="text" id="id_username" name="username"
+                   value="{{ form.username.value|default:'' }}"
+                   placeholder=" " required autofocus>
+            <label for="id_username">Username</label>
+          </div>
+          {% for error in form.username.errors %}
+            <span class="md-supporting-text">{{ error }}</span>
+          {% endfor %}
+        </div>
+
+        <div class="md-text-field {% if form.email.errors %}error{% endif %}">
+          <div class="md-text-field-container">
+            <input type="email" id="id_email" name="email"
+                   value="{{ form.email.value|default:'' }}"
+                   placeholder=" ">
+            <label for="id_email">Email (optional)</label>
+          </div>
+          {% for error in form.email.errors %}
+            <span class="md-supporting-text">{{ error }}</span>
+          {% endfor %}
+        </div>
+
+        <div class="md-text-field {% if form.password1.errors %}error{% endif %}">
+          <div class="md-text-field-container">
+            <input type="password" id="id_password1" name="password1"
+                   placeholder=" " required autocomplete="new-password">
+            <label for="id_password1">Password</label>
+          </div>
+          {% for error in form.password1.errors %}
+            <span class="md-supporting-text">{{ error }}</span>
+          {% endfor %}
+        </div>
+
+        <div class="md-text-field {% if form.password2.errors %}error{% endif %}">
+          <div class="md-text-field-container">
+            <input type="password" id="id_password2" name="password2"
+                   placeholder=" " required autocomplete="new-password">
+            <label for="id_password2">Confirm Password</label>
+          </div>
+          {% for error in form.password2.errors %}
+            <span class="md-supporting-text">{{ error }}</span>
+          {% endfor %}
+        </div>
+
+        <div class="md-text-field {% if form.max_recording_seconds.errors %}error{% endif %}">
+          <div class="md-text-field-container">
+            <input type="number" id="id_max_recording_seconds" name="max_recording_seconds"
+                   value="{{ form.max_recording_seconds.value|default:'300' }}"
+                   min="0" placeholder=" ">
+            <label for="id_max_recording_seconds">Max Recording Seconds</label>
+          </div>
+          {% for error in form.max_recording_seconds.errors %}
+            <span class="md-supporting-text">{{ error }}</span>
+          {% endfor %}
+          <span class="md-supporting-text">0 = unlimited</span>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:12px; margin-top:8px;">
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+            <input type="checkbox" name="is_staff" id="id_is_staff"
+                   style="width:18px; height:18px; accent-color:var(--md-sys-color-primary);">
+            <span class="md-body-medium">Grant staff / admin access</span>
+          </label>
+        </div>
+
+        <div class="form-actions" style="border-top:none; padding-top:16px; gap:12px;">
+          <button type="submit" class="md-button-filled">
+            <span class="material-symbols-outlined">person_add</span>
+            Create User
+          </button>
+          <a href="{% url 'accounts:dashboard' %}" class="md-button-text">Cancel</a>
+        </div>
+
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

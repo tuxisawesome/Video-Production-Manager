@@ -53,7 +53,7 @@ class CreateUserForm(forms.ModelForm):
 
     class Meta:
         model = User
-        fields = ["username", "email", "max_recording_seconds"]
+        fields = ["username", "email", "max_recording_seconds", "is_staff"]
         widgets = {
             "username": forms.TextInput(
                 attrs={

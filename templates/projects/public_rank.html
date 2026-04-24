@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Rank Videos – {{ project.name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Rank Videos – {{ project.name }}</h1>
+</div>
+
+<div class="content-area">
+
+  <!-- Progress Bar -->
+  <div style="margin-bottom:24px;">
+    <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+      <span class="md-label-medium text-on-surface-variant">Comparisons completed</span>
+      <span class="md-label-medium text-on-surface-variant">
+        <span id="progress-done">{{ progress.completed }}</span> / <span id="progress-total">{{ progress.total }}</span>
+      </span>
+    </div>
+    <div class="md-progress-linear">
+      <div class="md-progress-linear-indicator" id="progress-bar" style="width:{{ progress.percent }}%;"></div>
+    </div>
+  </div>
+
+  <!-- Comparison Area -->
+  <div id="comparison-area">
+    <div id="comparison-panels" class="two-panel">
+      <div class="panel">
+        <div class="md-card-elevated" style="overflow:hidden;">
+          <video id="video-left" controls style="width:100%; aspect-ratio:16/9; background:#000; display:block;"></video>
+          <div style="padding:12px 16px;">
+            <p class="md-title-small" id="name-left">--</p>
+            <p class="md-body-small text-on-surface-variant" id="elo-left">Elo: --</p>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="md-card-elevated" style="overflow:hidden;">
+          <video id="video-right" controls style="width:100%; aspect-ratio:16/9; background:#000; display:block;"></video>
+          <div style="padding:12px 16px;">
+            <p class="md-title-small" id="name-right">--</p>
+            <p class="md-body-small text-on-surface-variant" id="elo-right">Elo: --</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex; align-items:center; justify-content:center; gap:16px; padding:24px 0;">
+      <button type="button" class="md-button-tonal" id="btn-left-wins" onclick="submitResult('left')">
+        <span class="material-symbols-outlined">arrow_back</span>
+        Left is Better
+      </button>
+      <button type="button" class="md-button-outlined" id="btn-equal" onclick="submitResult('equal')">
+        Equal
+      </button>
+      <button type="button" class="md-button-tonal" id="btn-right-wins" onclick="submitResult('right')">
+        Right is Better
+        <span class="material-symbols-outlined">arrow_forward</span>
+      </button>
+    </div>
+
+    <div style="text-align:center; margin-bottom:16px;">
+      <span class="md-body-small text-on-surface-variant">
+        Keyboard shortcuts:
+        <kbd style="padding:2px 8px; border-radius:4px; background:var(--md-sys-color-surface-container-highest); font-family:monospace; font-size:12px;">&larr;</kbd> Left wins
+        &nbsp;&middot;&nbsp;
+        <kbd style="padding:2px 8px; border-radius:4px; background:var(--md-sys-color-surface-container-highest); font-family:monospace; font-size:12px;">&uarr;&darr;</kbd> Equal
+        &nbsp;&middot;&nbsp;
+        <kbd style="padding:2px 8px; border-radius:4px; background:var(--md-sys-color-surface-container-highest); font-family:monospace; font-size:12px;">&rarr;</kbd> Right wins
+      </span>
+    </div>
+  </div>
+
+  <!-- Completion State -->
+  <div id="completion-area" class="empty-state" style="display:none;">
+    <div class="empty-state-icon" style="background-color:var(--md-sys-color-success-container); color:var(--md-sys-color-on-success-container);">
+      <span class="material-symbols-outlined">check_circle</span>
+    </div>
+    <h2 class="empty-state-title">All comparisons complete!</h2>
+    <p class="empty-state-description">Thank you for ranking these videos.</p>
+  </div>
+
+</div>
+
+<script id="page-data" type="application/json">
+{
+  "next_pair_url": "{% url 'projects:public_next_pair' token %}",
+  "submit_url":    "{% url 'projects:public_submit' token %}",
+  "csrf_token":    "{{ csrf_token }}"
+}
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/ranking.js' %}"></script>
+{% endblock %}

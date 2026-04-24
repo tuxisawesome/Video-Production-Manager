@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Access Required{% endblock %}
+
+{% block content %}
+<div class="content-area" style="max-width:400px; margin:80px auto;">
+  <div class="md-card-elevated" style="padding:32px; text-align:center;">
+    <span class="material-symbols-outlined" style="font-size:48px; color:var(--md-sys-color-primary); margin-bottom:16px; display:block;">lock</span>
+    <h1 class="md-title-large" style="margin-bottom:8px;">Password Required</h1>
+    <p class="md-body-medium text-on-surface-variant" style="margin-bottom:24px;">
+      This link is protected. Enter the password to continue.
+    </p>
+
+    {% if error %}
+      <div style="padding:10px 14px; border-radius:var(--md-sys-shape-corner-small);
+                  background:var(--md-sys-color-error-container); color:var(--md-sys-color-on-error-container);
+                  margin-bottom:16px;">
+        {{ error }}
+      </div>
+    {% endif %}
+
+    <form method="post">
+      {% csrf_token %}
+      <div class="md-text-field" style="margin-bottom:16px;">
+        <div class="md-text-field-container">
+          <input type="password" name="password" placeholder=" " required autofocus autocomplete="current-password">
+          <label>Password</label>
+        </div>
+      </div>
+      <button type="submit" class="md-button-filled" style="width:100%;">
+        <span class="material-symbols-outlined">lock_open</span>
+        Unlock
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

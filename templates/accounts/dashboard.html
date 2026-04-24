@@ -91,124 +91,17 @@
 
     <!-- Create User -->
     <div class="md-card-elevated" style="padding:24px;">
-      <h2 class="md-title-large" style="margin-bottom:20px;">
+      <h2 class="md-title-large" style="margin-bottom:12px;">
         <span class="material-symbols-outlined" style="font-size:22px; vertical-align:middle; margin-right:8px;">person_add</span>
         Create User
       </h2>
-
-      <form method="post" action="{% url 'accounts:create_user' %}">
-        {% csrf_token %}
-
-        {% if create_user_form.non_field_errors %}
-          <div style="margin-bottom:16px; padding:12px 16px; border-radius:var(--md-sys-shape-corner-small); background-color:var(--md-sys-color-error-container); color:var(--md-sys-color-on-error-container);">
-            {% for error in create_user_form.non_field_errors %}
-              <p class="md-body-medium">{{ error }}</p>
-            {% endfor %}
-          </div>
-        {% endif %}
-
-        <div class="form-section">
-          <div class="md-text-field {% if create_user_form.username.errors %}error{% endif %}">
-            <div class="md-text-field-container">
-              <input
-                type="text"
-                id="id_create_username"
-                name="username"
-                value="{{ create_user_form.username.value|default:'' }}"
-                placeholder=" "
-                required
-              >
-              <label for="id_create_username">Username</label>
-            </div>
-            {% if create_user_form.username.errors %}
-              {% for error in create_user_form.username.errors %}
-                <span class="md-supporting-text">{{ error }}</span>
-              {% endfor %}
-            {% endif %}
-          </div>
-
-          <div class="md-text-field {% if create_user_form.email.errors %}error{% endif %}">
-            <div class="md-text-field-container">
-              <input
-                type="email"
-                id="id_create_email"
-                name="email"
-                value="{{ create_user_form.email.value|default:'' }}"
-                placeholder=" "
-              >
-              <label for="id_create_email">Email</label>
-            </div>
-            {% if create_user_form.email.errors %}
-              {% for error in create_user_form.email.errors %}
-                <span class="md-supporting-text">{{ error }}</span>
-              {% endfor %}
-            {% endif %}
-          </div>
-
-          <div class="md-text-field {% if create_user_form.password1.errors %}error{% endif %}">
-            <div class="md-text-field-container">
-              <input
-                type="password"
-                id="id_create_password1"
-                name="password1"
-                placeholder=" "
-                required
-              >
-              <label for="id_create_password1">Password</label>
-            </div>
-            {% if create_user_form.password1.errors %}
-              {% for error in create_user_form.password1.errors %}
-                <span class="md-supporting-text">{{ error }}</span>
-              {% endfor %}
-            {% endif %}
-          </div>
-
-          <div class="md-text-field {% if create_user_form.password2.errors %}error{% endif %}">
-            <div class="md-text-field-container">
-              <input
-                type="password"
-                id="id_create_password2"
-                name="password2"
-                placeholder=" "
-                required
-              >
-              <label for="id_create_password2">Confirm Password</label>
-            </div>
-            {% if create_user_form.password2.errors %}
-              {% for error in create_user_form.password2.errors %}
-                <span class="md-supporting-text">{{ error }}</span>
-              {% endfor %}
-            {% endif %}
-          </div>
-
-          <div class="md-text-field {% if create_user_form.max_recording_seconds.errors %}error{% endif %}">
-            <div class="md-text-field-container">
-              <input
-                type="number"
-                id="id_create_max_recording_seconds"
-                name="max_recording_seconds"
-                value="{{ create_user_form.max_recording_seconds.value|default:'300' }}"
-                min="0"
-                placeholder=" "
-              >
-              <label for="id_create_max_recording_seconds">Max Recording Seconds</label>
-            </div>
-            {% if create_user_form.max_recording_seconds.errors %}
-              {% for error in create_user_form.max_recording_seconds.errors %}
-                <span class="md-supporting-text">{{ error }}</span>
-              {% endfor %}
-            {% endif %}
-            <span class="md-supporting-text">0 means unlimited</span>
-          </div>
-
-          <div class="form-actions" style="border-top:none; padding-top:8px;">
-            <button type="submit" class="md-button-filled">
-              <span class="material-symbols-outlined">person_add</span>
-              Create User
-            </button>
-          </div>
-        </div>
-      </form>
+      <p class="md-body-medium text-on-surface-variant" style="margin-top:0; margin-bottom:20px;">
+        Add a new account that can log in and use this application.
+      </p>
+      <a href="{% url 'accounts:create_user' %}" class="md-button-filled">
+        <span class="material-symbols-outlined">person_add</span>
+        Create New User
+      </a>
     </div>
 
     <!-- Data Migration -->

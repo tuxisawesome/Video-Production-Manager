@@ -1,12 +1,16 @@
 'use strict';
 
 // ---------------------------------------------------------------------------
-// CSRF helper
+// Page data & CSRF
 // ---------------------------------------------------------------------------
 
+const _pageData = JSON.parse(document.getElementById('page-data')?.textContent || '{}');
+const _isOwner  = _pageData.isOwner !== false;
+const _csrfToken = _pageData.csrfToken || '';
+
 function getCSRFToken() {
-    const meta = document.querySelector('meta[name="csrf-token"]');
-    return meta ? meta.getAttribute('content') : '';
+    return _csrfToken ||
+        document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 }
 
 // ---------------------------------------------------------------------------
@@ -32,8 +36,18 @@ const uploadInput = document.getElementById('video-upload-input');
 const deleteVideoDialog = document.getElementById('delete-video-dialog');
 const deleteVideoForm   = document.getElementById('delete-video-form');
 const deleteVideoName   = document.getElementById('delete-video-name');
-
 const deleteProjectDialog = document.getElementById('delete-project-dialog');
+
+const commentsList  = document.getElementById('comments-list');
+const commentText   = document.getElementById('comment-text');
+const commentTs     = document.getElementById('comment-timestamp');
+
+// Current sidebar state
+let _currentCard = null;
+let _commentListUrl   = '';
+let _commentCreateUrl = '';
+let _currentProjectPk = '';
+let _currentVideoId   = '';
 
 // ---------------------------------------------------------------------------
 // Utility: format bytes
@@ -47,17 +61,29 @@ function formatBytes(bytes) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
+function formatTimestamp(secs) {
+    if (secs == null) return '';
+    const m = Math.floor(secs / 60);
+    const s = (secs % 60).toFixed(1).padStart(4, '0');
+    return m > 0 ? `${m}:${s}` : `${s}s`;
+}
+
 // ---------------------------------------------------------------------------
 // Sidebar: open / close
 // ---------------------------------------------------------------------------
 
 function openSidebar(cardEl) {
-    const videoUrl      = cardEl.dataset.videoUrl;
-    const videoName     = cardEl.dataset.videoName;
-    const videoDuration = cardEl.dataset.videoDuration;
-    const videoSize     = cardEl.dataset.videoSize;
-    const videoElo      = cardEl.dataset.videoElo;
-    const videoId       = cardEl.dataset.videoId;
+    _currentCard      = cardEl;
+    const videoUrl        = cardEl.dataset.videoUrl;
+    const videoName       = cardEl.dataset.videoName;
+    const videoDuration   = cardEl.dataset.videoDuration;
+    const videoSize       = cardEl.dataset.videoSize;
+    const videoElo        = cardEl.dataset.videoElo;
+    const videoId         = cardEl.dataset.videoId;
+    _commentListUrl       = cardEl.dataset.commentUrl || '';
+    _commentCreateUrl     = cardEl.dataset.commentCreateUrl || '';
+    _currentProjectPk     = cardEl.dataset.projectPk || '';
+    _currentVideoId       = videoId;
 
     // Set video player source
     sidebarPlayer.src = videoUrl;
@@ -71,17 +97,25 @@ function openSidebar(cardEl) {
     sidebarFields.size.textContent      = formatBytes(parseInt(videoSize, 10));
     sidebarFields.elo.textContent       = parseFloat(videoElo).toFixed(0);
 
-    // Build download URL relative to current page path
-    // Current page is /projects/<id>/, download is /projects/<id>/videos/<vid>/download/
+    // Build download URL
     const basePath = window.location.pathname.replace(/\/$/, '');
     sidebarDownloadLink.href = basePath + '/videos/' + videoId + '/download/';
 
-    // Wire up sidebar delete button
-    sidebarDeleteBtn.onclick = function () {
-        confirmDeleteVideo(videoId, videoName);
-    };
+    // Wire up sidebar delete button (owners only)
+    if (sidebarDeleteBtn) {
+        sidebarDeleteBtn.onclick = function () {
+            confirmDeleteVideo(videoId, videoName);
+        };
+    }
 
-    // Show sidebar and overlay
+    // Clear comment input
+    if (commentText) commentText.value = '';
+    if (commentTs)   commentTs.value   = '';
+
+    // Load comments
+    if (_commentListUrl) loadComments();
+
+    // Show sidebar
     sidebar.classList.add('open');
     sidebarOverlay.classList.add('open');
 }
@@ -89,9 +123,108 @@ function openSidebar(cardEl) {
 function closeSidebar() {
     sidebarPlayer.pause();
     sidebarPlayer.removeAttribute('src');
-    sidebarPlayer.load(); // reset player
+    sidebarPlayer.load();
     sidebar.classList.remove('open');
     sidebarOverlay.classList.remove('open');
+    _currentCard = null;
+}
+
+// ---------------------------------------------------------------------------
+// Comments
+// ---------------------------------------------------------------------------
+
+async function loadComments() {
+    if (!_commentListUrl) return;
+    try {
+        const resp = await fetch(_commentListUrl, { headers: { 'Accept': 'application/json' } });
+        if (!resp.ok) return;
+        const { comments } = await resp.json();
+        renderComments(comments);
+    } catch (e) {
+        console.error('[Comments] load error', e);
+    }
+}
+
+function renderComments(comments) {
+    if (!commentsList) return;
+    if (!comments.length) {
+        commentsList.innerHTML = '<span class="md-body-small text-on-surface-variant">No comments yet.</span>';
+        return;
+    }
+    commentsList.innerHTML = comments.map(c => {
+        const ts = c.timestamp_seconds != null
+            ? `<button class="md-button-text" style="font-size:12px; padding:0 4px; min-width:0;"
+                       onclick="seekToTimestamp(${c.timestamp_seconds})">@${formatTimestamp(c.timestamp_seconds)}</button>`
+            : '';
+        const del = c.is_own || _isOwner
+            ? `<button class="md-icon-button" style="margin-left:auto; color:var(--md-sys-color-error); flex-shrink:0;"
+                       onclick="deleteComment(${c.id})" title="Delete">
+                 <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
+               </button>`
+            : '';
+        return `
+            <div style="background:var(--md-sys-color-surface-container); border-radius:var(--md-sys-shape-corner-small);
+                        padding:10px 12px; display:flex; flex-direction:column; gap:4px;" data-comment-id="${c.id}">
+              <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                <span class="md-label-medium">${escapeHtml(c.author)}</span>
+                ${ts}
+                <span class="md-body-small text-on-surface-variant" style="margin-left:auto; white-space:nowrap;">${formatDate(c.created_at)}</span>
+                ${del}
+              </div>
+              <p class="md-body-medium" style="margin:0; white-space:pre-wrap;">${escapeHtml(c.text)}</p>
+            </div>`;
+    }).join('');
+}
+
+async function submitComment() {
+    if (!_commentCreateUrl) return;
+    const text = commentText ? commentText.value.trim() : '';
+    if (!text) return;
+    const ts = commentTs && commentTs.value !== '' ? parseFloat(commentTs.value) : null;
+
+    try {
+        const resp = await fetch(_commentCreateUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken(),
+            },
+            body: JSON.stringify({ text, timestamp_seconds: ts }),
+        });
+        if (!resp.ok) {
+            const err = await resp.json();
+            alert(err.error || 'Failed to post comment.');
+            return;
+        }
+        if (commentText) commentText.value = '';
+        if (commentTs)   commentTs.value   = '';
+        loadComments();
+    } catch (e) {
+        console.error('[Comments] submit error', e);
+    }
+}
+
+async function deleteComment(commentId) {
+    const deleteUrl = `/projects/${_currentProjectPk}/videos/${_currentVideoId}/comments/${commentId}/delete/`;
+    try {
+        const resp = await fetch(deleteUrl, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCSRFToken() },
+        });
+        if (resp.ok) loadComments();
+    } catch (e) {
+        console.error('[Comments] delete error', e);
+    }
+}
+
+function seekToTimestamp(secs) {
+    if (sidebarPlayer) sidebarPlayer.currentTime = secs;
+}
+
+function useVideoTimestamp() {
+    if (sidebarPlayer && commentTs) {
+        commentTs.value = sidebarPlayer.currentTime.toFixed(1);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -99,10 +232,40 @@ function closeSidebar() {
 // ---------------------------------------------------------------------------
 
 function confirmDeleteVideo(videoId, videoName) {
+    if (!deleteVideoDialog) return;
     deleteVideoName.textContent = videoName;
     const basePath = window.location.pathname.replace(/\/$/, '');
     deleteVideoForm.action = basePath + '/videos/' + videoId + '/delete/';
     deleteVideoDialog.classList.add('open');
+}
+
+// ---------------------------------------------------------------------------
+// Copy share link helper
+// ---------------------------------------------------------------------------
+
+function showCopied(inputEl) {
+    inputEl.select();
+    try { document.execCommand('copy'); } catch (_) {}
+    const orig = inputEl.style.borderColor;
+    inputEl.style.borderColor = 'var(--md-sys-color-primary)';
+    setTimeout(() => { inputEl.style.borderColor = orig; }, 1200);
+}
+
+// ---------------------------------------------------------------------------
+// HTML helpers
+// ---------------------------------------------------------------------------
+
+function escapeHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function formatDate(isoStr) {
+    const d = new Date(isoStr);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 // ---------------------------------------------------------------------------
@@ -111,54 +274,49 @@ function confirmDeleteVideo(videoId, videoName) {
 
 if (uploadInput && uploadForm) {
     uploadInput.addEventListener('change', function () {
-        if (uploadInput.files.length > 0) {
-            uploadForm.submit();
-        }
+        if (uploadInput.files.length > 0) uploadForm.submit();
     });
 }
 
 // ---------------------------------------------------------------------------
-// Keyboard: close sidebar with Escape
+// Keyboard: Escape closes sidebar / dialogs
 // ---------------------------------------------------------------------------
 
 document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
         closeSidebar();
-        // Also close any open dialogs
-        if (deleteVideoDialog) deleteVideoDialog.classList.remove('open');
+        if (deleteVideoDialog)   deleteVideoDialog.classList.remove('open');
         if (deleteProjectDialog) deleteProjectDialog.classList.remove('open');
+        const shareDialog = document.getElementById('share-dialog');
+        if (shareDialog)         shareDialog.classList.remove('open');
     }
 });
 
 // ---------------------------------------------------------------------------
-// Close overlay click for dialogs
+// Dialog click-outside to close
 // ---------------------------------------------------------------------------
-
-if (sidebarOverlay) {
-    sidebarOverlay.addEventListener('click', closeSidebar);
-}
 
 if (deleteVideoDialog) {
-    deleteVideoDialog.addEventListener('click', function (e) {
-        if (e.target === deleteVideoDialog) {
-            deleteVideoDialog.classList.remove('open');
-        }
+    deleteVideoDialog.addEventListener('click', e => {
+        if (e.target === deleteVideoDialog) deleteVideoDialog.classList.remove('open');
     });
 }
-
 if (deleteProjectDialog) {
-    deleteProjectDialog.addEventListener('click', function (e) {
-        if (e.target === deleteProjectDialog) {
-            deleteProjectDialog.classList.remove('open');
-        }
+    deleteProjectDialog.addEventListener('click', e => {
+        if (e.target === deleteProjectDialog) deleteProjectDialog.classList.remove('open');
     });
 }
 
 // ---------------------------------------------------------------------------
-// Expose functions globally for inline onclick handlers in the template
+// Expose globals
 // ---------------------------------------------------------------------------
 
 window.openSidebar        = openSidebar;
 window.closeSidebar       = closeSidebar;
 window.confirmDeleteVideo = confirmDeleteVideo;
 window.formatBytes        = formatBytes;
+window.submitComment      = submitComment;
+window.deleteComment      = deleteComment;
+window.seekToTimestamp    = seekToTimestamp;
+window.useVideoTimestamp  = useVideoTimestamp;
+window.showCopied         = showCopied;

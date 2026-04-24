@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ video.filename_original|default:"Video" }} – Shared Video{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">{{ video.filename_original|default:"Video" }}</h1>
+</div>
+
+<div class="content-area" style="max-width:900px;">
+  <div class="md-card-elevated" style="overflow:hidden;">
+    <video controls style="width:100%; aspect-ratio:16/9; background:#000; display:block;"
+           src="{% url 'projects:public_video_stream' link.token %}"></video>
+    <div style="padding:16px 20px;">
+      <span class="md-body-small text-on-surface-variant">Shared video · Elo {{ video.elo_rating|floatformat:0 }}</span>
+    </div>
+  </div>
+</div>
+{% endblock %}

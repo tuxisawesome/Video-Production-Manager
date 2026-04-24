@@ -128,33 +128,19 @@ def _get_storage_info():
 @login_required
 @user_passes_test(is_staff, login_url="/accounts/login/")
 def create_user_view(request):
-    """Staff-only view to create a new user account."""
-    if request.method != "POST":
-        return redirect("accounts:dashboard")
+    """Staff-only dedicated page to create a new user account."""
+    if request.method == "POST":
+        form = CreateUserForm(request.POST)
+        if form.is_valid():
+            user = form.save(commit=False)
+            user.created_by = request.user
+            user.save()
+            messages.success(request, f'User "{user.username}" created successfully.')
+            return redirect("accounts:dashboard")
+    else:
+        form = CreateUserForm()
 
-    form = CreateUserForm(request.POST)
-    if form.is_valid():
-        user = form.save(commit=False)
-        user.created_by = request.user
-        user.save()
-        messages.success(request, f'User "{user.username}" created successfully.')
-        return redirect("accounts:dashboard")
-
-    # Re-render the dashboard with form errors.
-    users = User.objects.all()
-    site_settings = SiteSettings.load()
-    site_settings_form = SiteSettingsForm(instance=site_settings)
-
-    return render(
-        request,
-        "accounts/dashboard.html",
-        {
-            "users": users,
-            "create_user_form": form,
-            "site_settings": site_settings,
-            "site_settings_form": site_settings_form,
-        },
-    )
+    return render(request, "accounts/create_user.html", {"form": form})
 
 
 @login_required

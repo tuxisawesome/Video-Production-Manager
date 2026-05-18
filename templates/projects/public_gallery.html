@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ project.name }} – Shared Videos{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+    <div>
+      <h1 class="page-title">{{ project.name }}</h1>
+      <p class="page-subtitle" style="margin:0;">Shared video gallery · {{ videos|length }} video{{ videos|length|pluralize }}</p>
+    </div>
+    {% if link.link_type == 'both' %}
+      <a href="{% url 'projects:public_rank' token %}" class="md-button-tonal" style="margin-left:auto;">
+        <span class="material-symbols-outlined">leaderboard</span>
+        Rank Videos
+      </a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="content-area">
+  {% if videos %}
+    <div class="video-grid">
+      {% for video in videos %}
+        <div class="video-card" style="cursor:pointer;"
+             onclick="openPublicVideo('{{ video.pk }}', '{{ video.filename_original|default:video.pk|escapejs }}', '{% url "projects:public_gallery_video_stream" token video.pk %}')">
+          <div class="video-thumbnail">
+            {% if video.thumbnail %}
+              <img src="{{ video.thumbnail.url }}" alt="{{ video.filename_original }}">
+            {% else %}
+              <div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; background:var(--md-sys-color-surface-container-highest);">
+                <span class="material-symbols-outlined" style="font-size:48px; color:var(--md-sys-color-on-surface-variant);">videocam</span>
+              </div>
+            {% endif %}
+            {% if video.duration_seconds %}
+              <span class="video-duration">{{ video.duration_seconds|floatformat:0 }}s</span>
+            {% endif %}
+            <div class="video-status-overlay">
+              <span class="md-badge large" style="background-color:var(--md-sys-color-primary); color:var(--md-sys-color-on-primary);">#{{ forloop.counter }}</span>
+            </div>
+          </div>
+          <div class="video-info">
+            <span class="video-title">{{ video.filename_original|default:video.pk }}</span>
+            <div class="video-meta">
+              <span>Elo: {{ video.elo_rating|floatformat:0 }}</span>
+              <span>{{ video.created_at|date:"M j, Y" }}</span>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-state-icon">
+        <span class="material-symbols-outlined">videocam</span>
+      </div>
+      <h2 class="empty-state-title">No videos yet</h2>
+      <p class="empty-state-description">This project doesn't have any videos yet.</p>
+    </div>
+  {% endif %}
+</div>
+
+<!-- Inline video modal -->
+<div id="gallery-modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:200; align-items:center; justify-content:center; padding:20px; box-sizing:border-box;">
+  <div style="background:var(--md-sys-color-surface); border-radius:var(--md-sys-shape-corner-large); overflow:hidden; max-width:900px; width:100%; box-shadow:0 8px 32px rgba(0,0,0,0.4);">
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--md-sys-color-outline-variant);">
+      <span class="md-title-medium" id="gallery-modal-title"></span>
+      <button type="button" class="md-icon-button" onclick="closePublicVideo();">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+    <video id="gallery-modal-player" controls style="width:100%; aspect-ratio:16/9; background:#000; display:block;"></video>
+  </div>
+</div>
+
+<script>
+  const galleryOverlay = document.getElementById('gallery-modal-overlay');
+  const galleryPlayer  = document.getElementById('gallery-modal-player');
+  const galleryTitle   = document.getElementById('gallery-modal-title');
+
+  function openPublicVideo(id, name, url) {
+    galleryTitle.textContent = name;
+    galleryPlayer.src = url;
+    galleryOverlay.style.display = 'flex';
+  }
+
+  function closePublicVideo() {
+    galleryPlayer.pause();
+    galleryPlayer.removeAttribute('src');
+    galleryPlayer.load();
+    galleryOverlay.style.display = 'none';
+  }
+
+  galleryOverlay.addEventListener('click', function(e) {
+    if (e.target === galleryOverlay) closePublicVideo();
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closePublicVideo();
+  });
+</script>
+{% endblock %}

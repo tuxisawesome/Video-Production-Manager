@@ -116,7 +116,8 @@ class ShareLink(models.Model):
 
     RANK = "rank"
     VIEW = "view"
-    LINK_TYPES = [(RANK, "Ranking"), (VIEW, "View Video")]
+    BOTH = "both"
+    LINK_TYPES = [(RANK, "Ranking only"), (VIEW, "View videos"), (BOTH, "View + Rank")]
 
     token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     link_type = models.CharField(max_length=10, choices=LINK_TYPES)

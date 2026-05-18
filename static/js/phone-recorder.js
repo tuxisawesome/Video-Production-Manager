@@ -69,6 +69,10 @@ let timerSeconds = 0;
 // Wake lock state
 let wakeLock = null;
 
+// Discard guard: set true before stopMediaRecorder() so async ondataavailable
+// and onstop callbacks don't re-queue chunks or trigger finalization.
+let isDiscarding = false;
+
 // WebSocket reconnect state
 let reconnectDelay = 1000;
 const RECONNECT_MAX_DELAY = 30000;
@@ -332,6 +336,8 @@ function createMediaRecorder() {
 }
 
 function onDataAvailable(event) {
+    // If we're discarding, throw away any buffered data the MediaRecorder emits.
+    if (isDiscarding) return;
     if (event.data && event.data.size > 0) {
         totalBytesQueued += event.data.size;
         chunkQueue.push(event.data);
@@ -341,6 +347,12 @@ function onDataAvailable(event) {
 
 function onRecorderStop() {
     log('Recorder', 'Stopped');
+    // If we're discarding, don't trigger finalization — the discard handler
+    // already cleared the queue and sent the discard request.
+    if (isDiscarding) {
+        isDiscarding = false;
+        return;
+    }
     allChunksQueued = true;
     // Process any remaining chunks. Finalize will happen once queue drains.
     processChunkQueue();
@@ -449,6 +461,11 @@ async function finalizeRecording() {
 async function discardRecording() {
     log('Discard', 'Discarding recording...');
 
+    // Set the guard BEFORE stopping the recorder.
+    // MediaRecorder.stop() is async — ondataavailable fires after this call
+    // returns, so we must flag isDiscarding first to suppress those callbacks.
+    isDiscarding = true;
+
     // Stop MediaRecorder if still active.
     stopMediaRecorder();
 
@@ -482,6 +499,7 @@ function resetRecordingState() {
     allChunksQueued = false;
     chunkQueue = [];
     isUploading = false;
+    isDiscarding = false;
     mediaRecorder = null;
 }
 

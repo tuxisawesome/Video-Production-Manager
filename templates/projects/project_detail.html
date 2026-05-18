@@ -95,9 +95,6 @@
         <span class="md-chip" style="background:var(--md-sys-color-secondary-container); color:var(--md-sys-color-on-secondary-container);">
           {{ sl.get_link_type_display }}{% if sl.has_password %} 🔒{% endif %}
         </span>
-        {% if sl.link_type == 'view' and sl.video %}
-          <span class="md-body-small text-on-surface-variant">{{ sl.video.filename_original|default:sl.video.id }}</span>
-        {% endif %}
         <input type="text" readonly value="{{ request.scheme }}://{{ request.get_host }}{% url 'projects:share_gate' sl.token %}"
                class="admin-compact-input" style="width:320px; font-size:12px; font-family:monospace;"
                onclick="this.select(); document.execCommand('copy'); showCopied(this);">
@@ -155,15 +152,6 @@
               <span class="material-symbols-outlined">download</span>
             </a>
             {% if is_owner %}
-            <!-- Share video link button -->
-            <form method="post" action="{% url 'projects:share_link_create' project.pk %}" style="display:inline;">
-              {% csrf_token %}
-              <input type="hidden" name="link_type" value="view">
-              <input type="hidden" name="video_id" value="{{ video.pk }}">
-              <button type="submit" class="md-icon-button" title="Create share link for this video">
-                <span class="material-symbols-outlined">link</span>
-              </button>
-            </form>
             <button type="button" class="md-icon-button" title="Delete" style="color:var(--md-sys-color-error);"
                     onclick="confirmDeleteVideo('{{ video.pk }}', '{{ video.filename_original|default:video.pk|escapejs }}');">
               <span class="material-symbols-outlined">delete</span>
@@ -363,20 +351,40 @@
         </button>
       </form>
 
-      <!-- Ranking share link -->
+      <!-- Public share link -->
       <hr class="md-divider" style="margin:20px 0 12px;">
-      <p class="md-label-medium text-on-surface-variant" style="margin-bottom:8px;">Create a public ranking link</p>
-      <form method="post" action="{% url 'projects:share_link_create' project.pk %}" style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
+      <p class="md-label-medium text-on-surface-variant" style="margin-bottom:10px;">Create a public link</p>
+      <form method="post" action="{% url 'projects:share_link_create' project.pk %}" style="display:flex; flex-direction:column; gap:10px;">
         {% csrf_token %}
-        <input type="hidden" name="link_type" value="rank">
-        <div style="flex:1; min-width:140px;">
-          <input type="password" name="password" placeholder="Password (optional)"
-                 class="admin-compact-input" style="width:100%;" autocomplete="new-password">
+        <!-- Link type selection -->
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; padding:8px 12px;
+                        border-radius:var(--md-sys-shape-corner-small); border:1px solid var(--md-sys-color-outline);
+                        background:var(--md-sys-color-surface-container);">
+            <input type="radio" name="link_type" value="rank" checked style="accent-color:var(--md-sys-color-primary);">
+            <span class="md-body-medium">🏆 Ranking only</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; padding:8px 12px;
+                        border-radius:var(--md-sys-shape-corner-small); border:1px solid var(--md-sys-color-outline);
+                        background:var(--md-sys-color-surface-container);">
+            <input type="radio" name="link_type" value="view" style="accent-color:var(--md-sys-color-primary);">
+            <span class="md-body-medium">🎥 View videos</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; padding:8px 12px;
+                        border-radius:var(--md-sys-shape-corner-small); border:1px solid var(--md-sys-color-outline);
+                        background:var(--md-sys-color-surface-container);">
+            <input type="radio" name="link_type" value="both" style="accent-color:var(--md-sys-color-primary);">
+            <span class="md-body-medium">🔀 Both</span>
+          </label>
         </div>
-        <button type="submit" class="md-button-tonal" style="white-space:nowrap;">
-          <span class="material-symbols-outlined">link</span>
-          Generate Link
-        </button>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <input type="password" name="password" placeholder="Password (optional)"
+                 class="admin-compact-input" style="flex:1; min-width:140px;" autocomplete="new-password">
+          <button type="submit" class="md-button-tonal" style="white-space:nowrap; flex-shrink:0;">
+            <span class="material-symbols-outlined">link</span>
+            Generate Link
+          </button>
+        </div>
       </form>
 
     </div>

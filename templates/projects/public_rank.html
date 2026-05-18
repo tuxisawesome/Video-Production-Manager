@@ -5,7 +5,15 @@
 
 {% block content %}
 <div class="page-header">
-  <h1 class="page-title">Rank Videos – {{ project.name }}</h1>
+  <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+    <h1 class="page-title">Rank Videos – {{ project.name }}</h1>
+    {% if link.link_type == 'both' %}
+      <a href="{% url 'projects:public_gallery' token %}" class="md-button-tonal" style="margin-left:auto;">
+        <span class="material-symbols-outlined">video_library</span>
+        View Videos
+      </a>
+    {% endif %}
+  </div>
 </div>
 
 <div class="content-area">

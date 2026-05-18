@@ -444,25 +444,16 @@ def comment_delete_view(request, pk, video_id, comment_id):
 @login_required
 @require_POST
 def share_link_create_view(request, pk):
-    """Create a share link for a project (rank) or a specific video (view)."""
+    """Create a project-level share link (rank / view / both)."""
     project = get_object_or_404(Project, pk=pk, owner=request.user)
-    link_type = request.POST.get("link_type", "rank")
+    link_type = request.POST.get("link_type", ShareLink.RANK)
     raw_password = request.POST.get("password", "").strip()
-    video_id = request.POST.get("video_id", "").strip()
 
-    link = ShareLink(link_type=link_type, created_by=request.user)
-
-    if link_type == ShareLink.RANK:
-        link.project = project
-    elif link_type == ShareLink.VIEW:
-        if not video_id:
-            messages.error(request, "No video specified for view link.")
-            return redirect("projects:detail", pk=pk)
-        link.video = get_object_or_404(Video, pk=video_id, project=project)
-    else:
+    if link_type not in (ShareLink.RANK, ShareLink.VIEW, ShareLink.BOTH):
         messages.error(request, "Invalid link type.")
         return redirect("projects:detail", pk=pk)
 
+    link = ShareLink(link_type=link_type, project=project, created_by=request.user)
     link.set_password(raw_password)
     link.save()
     messages.success(request, "Share link created.")
@@ -474,10 +465,7 @@ def share_link_create_view(request, pk):
 def share_link_delete_view(request, pk, token):
     """Delete a share link owned by the user."""
     project = get_object_or_404(Project, pk=pk, owner=request.user)
-    link = get_object_or_404(ShareLink, token=token)
-    # Ensure the link belongs to this project or one of its videos.
-    if link.project != project and (link.video is None or link.video.project != project):
-        raise Http404
+    link = get_object_or_404(ShareLink, token=token, project=project)
     link.delete()
     messages.success(request, "Share link deleted.")
     return redirect("projects:detail", pk=pk)
@@ -486,6 +474,41 @@ def share_link_delete_view(request, pk, token):
 # ---------------------------------------------------------------------------
 # Public share link gate + viewers
 # ---------------------------------------------------------------------------
+
+from django.urls import reverse as _url_reverse
+
+
+def _share_destination(link, token):
+    """Return the URL users land on after unlocking a share link."""
+    if link.link_type == ShareLink.RANK:
+        return _url_reverse("projects:public_rank", args=[token])
+    # VIEW and BOTH both start at the gallery.
+    return _url_reverse("projects:public_gallery", args=[token])
+
+
+def _get_unlocked_link(request, token):
+    """Return the ShareLink if the session has it unlocked, else None."""
+    link = get_object_or_404(ShareLink, token=token)
+    if link.is_expired:
+        return None
+    if not link.has_password or request.session.get(_session_key(token)):
+        return link
+    return None
+
+
+def _require_link_access(request, token, allowed_types=None):
+    """
+    Return (link, None) if the link is valid and unlocked,
+    or (None, redirect_response) otherwise.
+    """
+    link = _get_unlocked_link(request, token)
+    if link is None:
+        return None, redirect(_url_reverse("projects:share_gate", args=[token]))
+    if allowed_types and link.link_type not in allowed_types:
+        return None, Http404
+    if link.project is None:
+        return None, Http404
+    return link, None
 
 
 def share_gate_view(request, token):
@@ -506,7 +529,7 @@ def share_gate_view(request, token):
             "token": token,
         })
 
-    # No password set → unlock immediately.
+    # No password → unlock immediately and redirect.
     if not link.has_password:
         request.session[session_key] = True
         return redirect(_share_destination(link, token))
@@ -518,61 +541,34 @@ def share_gate_view(request, token):
     return render(request, "projects/share_gate.html", {"token": token})
 
 
-def _share_destination(link, token):
-    if link.link_type == ShareLink.RANK:
-        return f"/share/{token}/rank/"
-    return f"/share/{token}/video/"
+def public_gallery_view(request, token):
+    """Public video gallery (VIEW and BOTH link types)."""
+    link, err = _require_link_access(request, token, allowed_types=[ShareLink.VIEW, ShareLink.BOTH])
+    if err is not None:
+        return err
+    videos = link.project.videos.order_by("-elo_rating")
+    return render(request, "projects/public_gallery.html", {
+        "link": link,
+        "project": link.project,
+        "videos": videos,
+        "token": token,
+    })
 
 
-def _get_unlocked_link(request, token):
-    """Return the ShareLink if the session has it unlocked, else None."""
-    link = get_object_or_404(ShareLink, token=token)
-    if link.is_expired:
-        return None
-    if not link.has_password or request.session.get(_session_key(token)):
-        return link
-    return None
-
-
-def public_video_view(request, token):
-    """Public video viewer page."""
-    link = _get_unlocked_link(request, token)
-    if link is None:
-        return redirect(f"/share/{token}/")
-    if link.link_type != ShareLink.VIEW or link.video is None:
+def public_gallery_video_stream(request, token, video_id):
+    """Serve a video file for the public gallery."""
+    link, err = _require_link_access(request, token, allowed_types=[ShareLink.VIEW, ShareLink.BOTH])
+    if err is not None:
         raise Http404
-    return render(request, "projects/public_video.html", {"link": link, "video": link.video})
-
-
-def public_video_stream(request, token):
-    """Serve the video file for a public share link."""
-    link = _get_unlocked_link(request, token)
-    if link is None:
-        raise Http404
-    if link.link_type != ShareLink.VIEW or link.video is None:
-        raise Http404
-    video = link.video
-    if not video.file:
-        raise Http404
-    if settings.DEBUG:
-        file_path = video.file.path
-        if not os.path.isfile(file_path):
-            raise Http404
-        return FileResponse(open(file_path, "rb"), content_type="video/webm")
-    response = HttpResponse()
-    response["Content-Type"] = "video/webm"
-    response["X-Accel-Redirect"] = f"/protected-media/{video.file.name}"
-    return response
+    video = get_object_or_404(Video, pk=video_id, project=link.project)
+    return _serve_video_file(video)
 
 
 def public_rank_view(request, token):
-    """Public ranking page."""
-    link = _get_unlocked_link(request, token)
-    if link is None:
-        return redirect(f"/share/{token}/")
-    if link.link_type != ShareLink.RANK or link.project is None:
-        raise Http404
-    from recording.models import Comparison
+    """Public ranking page (RANK and BOTH link types)."""
+    link, err = _require_link_access(request, token, allowed_types=[ShareLink.RANK, ShareLink.BOTH])
+    if err is not None:
+        return err
     from recording.ranking import get_ranking_progress
     progress = get_ranking_progress(link.project_id)
     return render(request, "projects/public_rank.html", {
@@ -586,12 +582,9 @@ def public_rank_view(request, token):
 @require_GET
 def public_next_pair_view(request, token):
     """Public API: get next pair to compare."""
-    link = _get_unlocked_link(request, token)
-    if link is None:
+    link, err = _require_link_access(request, token, allowed_types=[ShareLink.RANK, ShareLink.BOTH])
+    if err is not None:
         return JsonResponse({"error": "Unauthorized"}, status=403)
-    if link.link_type != ShareLink.RANK or link.project is None:
-        raise Http404
-    from django.urls import reverse as _reverse
     from recording.ranking import get_ranking_progress, select_next_pair
     progress = get_ranking_progress(link.project_id)
     pair = select_next_pair(link.project_id)
@@ -602,13 +595,13 @@ def public_next_pair_view(request, token):
         "complete": False,
         "video_left": {
             "id": str(video_a.id),
-            "url": f"/share/{token}/video-file/{video_a.id}/",
+            "url": _url_reverse("projects:public_rank_video_file", args=[token, video_a.id]),
             "name": video_a.filename_original or str(video_a.id),
             "elo": round(video_a.elo_rating, 1),
         },
         "video_right": {
             "id": str(video_b.id),
-            "url": f"/share/{token}/video-file/{video_b.id}/",
+            "url": _url_reverse("projects:public_rank_video_file", args=[token, video_b.id]),
             "name": video_b.filename_original or str(video_b.id),
             "elo": round(video_b.elo_rating, 1),
         },
@@ -619,11 +612,9 @@ def public_next_pair_view(request, token):
 @require_POST
 def public_submit_comparison_view(request, token):
     """Public API: submit a comparison result."""
-    link = _get_unlocked_link(request, token)
-    if link is None:
+    link, err = _require_link_access(request, token, allowed_types=[ShareLink.RANK, ShareLink.BOTH])
+    if err is not None:
         return JsonResponse({"error": "Unauthorized"}, status=403)
-    if link.link_type != ShareLink.RANK or link.project is None:
-        raise Http404
 
     try:
         data = json.loads(request.body)
@@ -645,7 +636,7 @@ def public_submit_comparison_view(request, token):
         video_left=video_left,
         video_right=video_right,
         result=result,
-        user=None,  # anonymous via share link
+        user=None,
     )
     update_elo(video_left, video_right, result)
     return JsonResponse({"success": True})
@@ -653,12 +644,15 @@ def public_submit_comparison_view(request, token):
 
 def public_rank_video_file(request, token, video_id):
     """Serve a video file for the public ranking page."""
-    link = _get_unlocked_link(request, token)
-    if link is None:
-        raise Http404
-    if link.link_type != ShareLink.RANK or link.project is None:
+    link, err = _require_link_access(request, token, allowed_types=[ShareLink.RANK, ShareLink.BOTH])
+    if err is not None:
         raise Http404
     video = get_object_or_404(Video, pk=video_id, project=link.project)
+    return _serve_video_file(video)
+
+
+def _serve_video_file(video):
+    """Shared helper: serve a Video's file via FileResponse (debug) or X-Accel-Redirect (prod)."""
     if not video.file:
         raise Http404
     if settings.DEBUG:

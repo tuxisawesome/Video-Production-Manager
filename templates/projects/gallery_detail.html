@@ -141,6 +141,10 @@
              data-comment-delete-base="{% url 'projects:comment_list' project.pk gallery.pk video.pk %}"
              data-project-pk="{{ project.pk }}"
              data-gallery-pk="{{ gallery.pk }}"
+             {% if is_owner %}
+             data-share-list-url="{% url 'projects:video_share_link_list' project.pk gallery.pk video.pk %}"
+             data-share-create-url="{% url 'projects:video_share_link_create' project.pk gallery.pk video.pk %}"
+             {% endif %}
              onclick="openSidebar(this)">
           <div class="video-thumbnail">
             {% if video.thumbnail %}
@@ -477,8 +481,6 @@
   "canComment": {% if is_owner or role == 'commentator' %}true{% else %}false{% endif %},
   "canDownload": {% if is_owner or role == 'commentator' %}true{% else %}false{% endif %},
   "deleteVideoBaseUrl": "{% url 'projects:video_delete' project.pk gallery.pk '00000000-0000-0000-0000-000000000000' %}",
-  "videoShareListBaseUrl": "{% url 'projects:video_share_link_list' project.pk gallery.pk '00000000-0000-0000-0000-000000000000' %}",
-  "videoShareCreateBaseUrl": "{% url 'projects:video_share_link_create' project.pk gallery.pk '00000000-0000-0000-0000-000000000000' %}",
   "shareLinkDeleteBaseUrl": "{% url 'projects:share_link_delete' project.pk '00000000-0000-0000-0000-000000000000' %}",
   "csrfToken": "{{ csrf_token }}"
 }

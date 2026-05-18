@@ -8,11 +8,9 @@ const _pageData = JSON.parse(document.getElementById('page-data')?.textContent |
 const _isOwner  = _pageData.isOwner !== false;
 const _csrfToken = _pageData.csrfToken || '';
 
-// URL templates (placeholder UUID replaced with actual video/token ID at runtime)
+// Placeholder used in the delete URL template (token slot).
 const _PLACEHOLDER = '00000000-0000-0000-0000-000000000000';
-const _videoShareListBase   = _pageData.videoShareListBaseUrl   || '';
-const _videoShareCreateBase = _pageData.videoShareCreateBaseUrl || '';
-const _shareLinkDeleteBase  = _pageData.shareLinkDeleteBaseUrl  || '';
+const _shareLinkDeleteBase = _pageData.shareLinkDeleteBaseUrl || '';
 
 function getCSRFToken() {
     return _csrfToken ||
@@ -50,11 +48,13 @@ const commentTs     = document.getElementById('comment-timestamp');
 
 // Current sidebar state
 let _currentCard = null;
-let _commentListUrl   = '';
-let _commentCreateUrl = '';
-let _currentProjectPk = '';
-let _currentGalleryPk = '';
-let _currentVideoId   = '';
+let _commentListUrl    = '';
+let _commentCreateUrl  = '';
+let _currentProjectPk  = '';
+let _currentGalleryPk  = '';
+let _currentVideoId    = '';
+let _videoShareListUrl = '';    // per-video, set from card data attribute
+let _videoShareCreateUrl = '';  // per-video, set from card data attribute
 
 // ---------------------------------------------------------------------------
 // Utility: format bytes
@@ -87,11 +87,13 @@ function openSidebar(cardEl) {
     const videoSize       = cardEl.dataset.videoSize;
     const videoElo        = cardEl.dataset.videoElo;
     const videoId         = cardEl.dataset.videoId;
-    _commentListUrl       = cardEl.dataset.commentUrl || '';
-    _commentCreateUrl     = cardEl.dataset.commentCreateUrl || '';
-    _currentProjectPk     = cardEl.dataset.projectPk || '';
-    _currentGalleryPk     = cardEl.dataset.galleryPk || '';
-    _currentVideoId       = videoId;
+    _commentListUrl      = cardEl.dataset.commentUrl || '';
+    _commentCreateUrl    = cardEl.dataset.commentCreateUrl || '';
+    _currentProjectPk    = cardEl.dataset.projectPk || '';
+    _currentGalleryPk    = cardEl.dataset.galleryPk || '';
+    _currentVideoId      = videoId;
+    _videoShareListUrl   = cardEl.dataset.shareListUrl || '';
+    _videoShareCreateUrl = cardEl.dataset.shareCreateUrl || '';
 
     // Set video player source
     sidebarPlayer.src = videoUrl;
@@ -123,8 +125,8 @@ function openSidebar(cardEl) {
     // Load comments
     if (_commentListUrl) loadComments();
 
-    // Load video share links (owner only)
-    if (_isOwner && _videoShareListBase) loadVideoShareLinks();
+    // Load video share links (owner only, URL provided by card data attribute)
+    if (_isOwner && _videoShareListUrl) loadVideoShareLinks();
 
     // Show sidebar
     sidebar.classList.add('open');
@@ -242,20 +244,42 @@ function useVideoTimestamp() {
 // Video share links (owner sidebar)
 // ---------------------------------------------------------------------------
 
-function _videoShareUrl(baseTemplate, videoId) {
-    return baseTemplate.replace(_PLACEHOLDER, videoId);
+function _shareErrHtml(msg) {
+    return `<span class="md-body-small" style="color:var(--md-sys-color-error);">${escapeHtml(msg)}</span>`;
 }
 
 async function loadVideoShareLinks() {
     const container = document.getElementById('video-share-links');
-    if (!container || !_currentVideoId || !_videoShareListBase) return;
+    if (!container) return;
+
+    // URL is baked into the card's data attribute — if missing, the section
+    // shouldn't be visible anyway (owner-only template guard).
+    if (!_videoShareListUrl) {
+        container.innerHTML = _shareErrHtml('No URL — refresh and try again.');
+        return;
+    }
+
+    container.innerHTML = '<span class="md-body-small text-on-surface-variant">Loading…</span>';
     try {
-        const url = _videoShareUrl(_videoShareListBase, _currentVideoId);
-        const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
-        if (!resp.ok) return;
-        const { links } = await resp.json();
-        renderVideoShareLinks(links);
+        const resp = await fetch(_videoShareListUrl, {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' },
+        });
+        if (!resp.ok) {
+            container.innerHTML = _shareErrHtml(`Server returned ${resp.status}. Check server logs.`);
+            console.error('[Share] list failed:', resp.status, _videoShareListUrl);
+            return;
+        }
+        let data;
+        try {
+            data = await resp.json();
+        } catch {
+            container.innerHTML = _shareErrHtml('Unexpected response (not JSON). Check server logs.');
+            return;
+        }
+        renderVideoShareLinks(data.links || []);
     } catch (e) {
+        container.innerHTML = _shareErrHtml('Network error. Check console.');
         console.error('[Share] load error', e);
     }
 }
@@ -279,21 +303,27 @@ function renderVideoShareLinks(links) {
                         cursor:pointer;"
                  onclick="this.select(); document.execCommand('copy');" title="Click to copy">
           <button class="md-icon-button" style="color:var(--md-sys-color-error); flex-shrink:0;"
-                  onclick="deleteVideoShareLink('${escapeHtml(sl.token)}')" title="Delete">
+                  onclick="deleteVideoShareLink('${escapeHtml(sl.delete_url)}')" title="Delete">
             <span class="material-symbols-outlined" style="font-size:18px;">delete</span>
           </button>
         </div>`).join('');
 }
 
 async function createVideoShareLink() {
-    if (!_currentVideoId || !_videoShareCreateBase) return;
-    const accessType = document.querySelector('input[name="vsl_access"]:checked')?.value || 'view';
-    const password   = document.getElementById('vsl-password')?.value.trim() || '';
+    if (!_videoShareCreateUrl) {
+        alert('Cannot create link: no URL available. Try refreshing the page.');
+        return;
+    }
+    const btn = document.querySelector('#video-sidebar button[onclick="createVideoShareLink();"]');
+    if (btn) btn.disabled = true;
 
-    const url = _videoShareUrl(_videoShareCreateBase, _currentVideoId);
+    const accessType = document.querySelector('input[name="vsl_access"]:checked')?.value || 'view';
+    const password   = (document.getElementById('vsl-password')?.value || '').trim();
+
     try {
-        const resp = await fetch(url, {
+        const resp = await fetch(_videoShareCreateUrl, {
             method: 'POST',
+            credentials: 'same-origin',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': getCSRFToken(),
@@ -301,35 +331,50 @@ async function createVideoShareLink() {
             },
             body: JSON.stringify({ access_type: accessType, password }),
         });
+
         if (!resp.ok) {
-            const err = await resp.json().catch(() => ({}));
-            alert(err.error || 'Failed to create share link.');
+            let msg = `Server error ${resp.status}.`;
+            try { const e = await resp.json(); msg = e.error || msg; } catch {}
+            alert(msg);
             return;
         }
-        const sl = await resp.json();
-        if (document.getElementById('vsl-password')) {
-            document.getElementById('vsl-password').value = '';
+
+        let data;
+        try { data = await resp.json(); } catch {
+            alert('Unexpected response from server. Check server logs.');
+            return;
         }
-        // Reload the list to show the new link
+
+        const pw = document.getElementById('vsl-password');
+        if (pw) pw.value = '';
         loadVideoShareLinks();
     } catch (e) {
+        alert('Network error creating share link. Check console.');
         console.error('[Share] create error', e);
+    } finally {
+        if (btn) btn.disabled = false;
     }
 }
 
-async function deleteVideoShareLink(token) {
-    if (!_shareLinkDeleteBase || !_pageData.projectPk) return;
-    const url = _shareLinkDeleteBase.replace(_PLACEHOLDER, token);
+async function deleteVideoShareLink(deleteUrl) {
+    // deleteUrl is the full relative URL returned by the list endpoint.
+    if (!deleteUrl) return;
     try {
-        const resp = await fetch(url, {
+        const resp = await fetch(deleteUrl, {
             method: 'POST',
+            credentials: 'same-origin',
             headers: {
                 'X-CSRFToken': getCSRFToken(),
                 'X-Requested-With': 'XMLHttpRequest',
             },
         });
-        if (resp.ok) loadVideoShareLinks();
+        if (resp.ok) {
+            loadVideoShareLinks();
+        } else {
+            alert(`Failed to delete link (${resp.status}).`);
+        }
     } catch (e) {
+        alert('Network error deleting link.');
         console.error('[Share] delete error', e);
     }
 }

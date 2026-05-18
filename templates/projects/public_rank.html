@@ -1,18 +1,22 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Rank Videos – {{ project.name }}{% endblock %}
+{% block title %}Rank Videos – {{ gallery.name }}{% endblock %}
 
 {% block content %}
 <div class="page-header">
   <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-    <h1 class="page-title">Rank Videos – {{ project.name }}</h1>
-    {% if link.link_type == 'both' %}
-      <a href="{% url 'projects:public_gallery' token %}" class="md-button-tonal" style="margin-left:auto;">
-        <span class="material-symbols-outlined">video_library</span>
-        View Videos
+    <div>
+      <a href="{% url 'projects:public_gallery' token %}" class="md-body-medium" style="display:inline-flex; align-items:center; gap:4px; margin-bottom:4px; color:var(--md-sys-color-primary);">
+        <span class="material-symbols-outlined" style="font-size:18px;">arrow_back</span>
+        {{ gallery.name }}
       </a>
-    {% endif %}
+      <h1 class="page-title">Rank Videos – {{ gallery.name }}</h1>
+    </div>
+    <a href="{% url 'projects:public_gallery' token %}" class="md-button-tonal" style="margin-left:auto;">
+      <span class="material-symbols-outlined">video_library</span>
+      View Videos
+    </a>
   </div>
 </div>
 

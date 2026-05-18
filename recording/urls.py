@@ -7,7 +7,7 @@ app_name = 'recording'
 urlpatterns = [
     # Session management
     path(
-        'session/start/<uuid:project_id>/',
+        'session/start/<uuid:gallery_id>/',
         views.start_session,
         name='start_session',
     ),
@@ -31,14 +31,14 @@ urlpatterns = [
     ),
 
     # Ranking
-    path('rank/<uuid:project_id>/', views.rank_view, name='rank_view'),
+    path('rank/<uuid:gallery_id>/', views.rank_view, name='rank_view'),
     path(
-        'rank/<uuid:project_id>/next-pair/',
+        'rank/<uuid:gallery_id>/next-pair/',
         views.next_pair,
         name='next_pair',
     ),
     path(
-        'rank/<uuid:project_id>/submit/',
+        'rank/<uuid:gallery_id>/submit/',
         views.submit_comparison,
         name='submit_comparison',
     ),
@@ -49,7 +49,7 @@ urlpatterns = [
 
     # Desktop recording control
     path(
-        'control/<uuid:project_id>/',
+        'control/<uuid:gallery_id>/',
         views.record_control,
         name='record_control',
     ),

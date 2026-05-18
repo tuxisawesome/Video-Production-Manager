@@ -28,33 +28,11 @@
   <div class="action-bar">
     <div class="action-group">
       {% if is_owner %}
-        <a href="{% url 'recording:record_control' project.pk %}" class="md-button-filled">
-          <span class="material-symbols-outlined">fiber_manual_record</span>
-          Record
-        </a>
-      {% endif %}
-      {% if videos.count >= 2 %}
-        <a href="{% url 'recording:rank_view' project.pk %}" class="md-button-tonal">
-          <span class="material-symbols-outlined">leaderboard</span>
-          Rank Videos
-        </a>
-      {% else %}
-        <button type="button" class="md-button-tonal" disabled title="Need at least 2 videos to rank">
-          <span class="material-symbols-outlined">leaderboard</span>
-          Rank Videos
+        <button type="button" class="md-button-filled"
+                onclick="document.getElementById('create-gallery-dialog').classList.add('open');">
+          <span class="material-symbols-outlined">add</span>
+          New Gallery
         </button>
-      {% endif %}
-      {% if is_owner %}
-        <button type="button" class="md-button-outlined" onclick="document.getElementById('video-upload-input').click();">
-          <span class="material-symbols-outlined">upload</span>
-          Upload
-        </button>
-        {% if videos %}
-          <a href="{% url 'projects:download_all' project.pk %}" class="md-button-outlined">
-            <span class="material-symbols-outlined">download</span>
-            Download All
-          </a>
-        {% endif %}
         <button type="button" class="md-button-outlined"
                 onclick="document.getElementById('share-dialog').classList.add('open');">
           <span class="material-symbols-outlined">share</span>
@@ -74,182 +52,53 @@
     </div>
   </div>
 
-  <!-- Hidden Upload Form -->
-  {% if is_owner %}
-  <form id="video-upload-form" method="post" action="{% url 'projects:video_upload' project.pk %}" enctype="multipart/form-data" style="display:none;">
-    {% csrf_token %}
-    <input type="file" id="video-upload-input" name="file" accept="video/*" onchange="document.getElementById('video-upload-form').submit();">
-  </form>
-  {% endif %}
-
-  <!-- Share Links banner (owner only) -->
-  {% if is_owner and share_links %}
-  <div class="md-card-elevated" style="padding:16px 20px; margin-bottom:20px;">
-    <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
-      <span class="material-symbols-outlined" style="font-size:20px;">link</span>
-      <span class="md-title-medium">Active Share Links</span>
-    </div>
-    <div style="display:flex; flex-direction:column; gap:10px;">
-      {% for sl in share_links %}
-      <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-        <span class="md-chip" style="background:var(--md-sys-color-secondary-container); color:var(--md-sys-color-on-secondary-container);">
-          {{ sl.get_link_type_display }}{% if sl.has_password %} 🔒{% endif %}
-        </span>
-        <input type="text" readonly value="{{ request.scheme }}://{{ request.get_host }}{% url 'projects:share_gate' sl.token %}"
-               class="admin-compact-input" style="width:320px; font-size:12px; font-family:monospace;"
-               onclick="this.select(); document.execCommand('copy'); showCopied(this);">
-        <form method="post" action="{% url 'projects:share_link_delete' project.pk sl.token %}" style="display:inline;">
-          {% csrf_token %}
-          <button type="submit" class="md-icon-button" title="Delete link" style="color:var(--md-sys-color-error);">
-            <span class="material-symbols-outlined">delete</span>
-          </button>
-        </form>
-      </div>
-      {% endfor %}
-    </div>
-  </div>
-  {% endif %}
-
-  <!-- Video Grid -->
-  {% if videos %}
-    <div class="video-grid">
-      {% for video in videos %}
-        <div class="video-card" data-video-id="{{ video.pk }}"
-             data-video-url="{% url 'projects:video_stream' video.project_id video.pk %}"
-             data-video-name="{{ video.filename_original|default:video.pk }}"
-             data-video-duration="{{ video.duration_seconds|default:'--' }}"
-             data-video-size="{{ video.file_size_bytes }}"
-             data-video-elo="{{ video.elo_rating }}"
-             data-comment-url="{% url 'projects:comment_list' project.pk video.pk %}"
-             data-comment-create-url="{% url 'projects:comment_create' project.pk video.pk %}"
-             data-comment-delete-base="{% url 'projects:comment_list' project.pk video.pk %}"
-             data-project-pk="{{ project.pk }}"
-             onclick="openSidebar(this)">
-          <div class="video-thumbnail">
-            {% if video.thumbnail %}
-              <img src="{{ video.thumbnail.url }}" alt="{{ video.filename_original }}">
-            {% else %}
-              <div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; background:var(--md-sys-color-surface-container-highest);">
-                <span class="material-symbols-outlined" style="font-size:48px; color:var(--md-sys-color-on-surface-variant);">videocam</span>
-              </div>
-            {% endif %}
-            {% if video.duration_seconds %}
-              <span class="video-duration">{{ video.duration_seconds|floatformat:0 }}s</span>
-            {% endif %}
-            <div class="video-status-overlay">
-              <span class="md-badge large" style="background-color:var(--md-sys-color-primary); color:var(--md-sys-color-on-primary);">#{{ forloop.counter }}</span>
-            </div>
+  <!-- Gallery Grid -->
+  {% if galleries %}
+    <div class="grid-container">
+      {% for gallery in galleries %}
+        <a href="{% url 'projects:gallery_detail' project.pk gallery.pk %}" class="md-card-elevated"
+           style="padding:20px; text-decoration:none; color:inherit;">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+            <span class="material-symbols-outlined" style="font-size:24px; color:var(--md-sys-color-primary);">photo_library</span>
+            <h3 class="md-title-medium" style="margin:0; flex:1;">{{ gallery.name }}</h3>
           </div>
-          <div class="video-info">
-            <span class="video-title">{{ video.filename_original|default:video.pk }}</span>
-            <div class="video-meta">
-              <span>Elo: {{ video.elo_rating|floatformat:0 }}</span>
-              <span>{{ video.created_at|date:"M j, Y" }}</span>
-            </div>
+          {% if gallery.description %}
+            <p class="md-body-medium text-on-surface-variant" style="margin-bottom:12px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">
+              {{ gallery.description }}
+            </p>
+          {% endif %}
+          <div class="flex items-center gap-sm" style="margin-top:auto;">
+            <span class="md-label-medium text-on-surface-variant">
+              <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">videocam</span>
+              {{ gallery.videos.count }} video{{ gallery.videos.count|pluralize }}
+            </span>
+            <span class="md-label-medium text-on-surface-variant" style="margin-left:auto;">
+              Updated {{ gallery.updated_at|timesince }} ago
+            </span>
           </div>
-          <div style="display:flex; align-items:center; gap:4px; padding:4px 12px 12px;" onclick="event.stopPropagation();">
-            <a href="{% url 'projects:video_download' project.pk video.pk %}" class="md-icon-button" title="Download">
-              <span class="material-symbols-outlined">download</span>
-            </a>
-            {% if is_owner %}
-            <button type="button" class="md-icon-button" title="Delete" style="color:var(--md-sys-color-error);"
-                    onclick="confirmDeleteVideo('{{ video.pk }}', '{{ video.filename_original|default:video.pk|escapejs }}');">
-              <span class="material-symbols-outlined">delete</span>
-            </button>
-            {% endif %}
-          </div>
-        </div>
+        </a>
       {% endfor %}
     </div>
   {% else %}
     <div class="empty-state">
       <div class="empty-state-icon">
-        <span class="material-symbols-outlined">videocam</span>
+        <span class="material-symbols-outlined">photo_library</span>
       </div>
-      <h2 class="empty-state-title">No videos recorded yet</h2>
-      <p class="empty-state-description">Click Record to get started.</p>
+      <h2 class="empty-state-title">No galleries yet</h2>
+      <p class="empty-state-description">Create a gallery to start organising your videos.</p>
       {% if is_owner %}
       <div class="empty-state-action">
-        <a href="{% url 'recording:record_control' project.pk %}" class="md-button-filled">
-          <span class="material-symbols-outlined">fiber_manual_record</span>
-          Record
-        </a>
+        <button type="button" class="md-button-filled"
+                onclick="document.getElementById('create-gallery-dialog').classList.add('open');">
+          <span class="material-symbols-outlined">add</span>
+          New Gallery
+        </button>
       </div>
       {% endif %}
     </div>
   {% endif %}
 
 </div>
-
-<!-- Sidebar: Video Preview + Comments -->
-<div id="sidebar-overlay" class="md-sidebar-overlay" onclick="closeSidebar();"></div>
-<aside id="video-sidebar" class="md-sidebar" style="width:420px; max-width:95vw;">
-  <div class="md-sidebar-header">
-    <span class="title" id="sidebar-title">Video Preview</span>
-    <button type="button" class="md-icon-button" onclick="closeSidebar();" aria-label="Close">
-      <span class="material-symbols-outlined">close</span>
-    </button>
-  </div>
-  <div class="md-sidebar-content" style="overflow-y:auto;">
-    <video id="sidebar-player" controls style="width:100%; border-radius:var(--md-sys-shape-corner-medium); background:#000; margin-bottom:16px;"></video>
-    <div class="flex-col gap-sm" style="margin-bottom:20px;">
-      <div>
-        <span class="md-label-medium text-on-surface-variant">Filename</span>
-        <p class="md-body-medium" id="sidebar-filename"></p>
-      </div>
-      <div>
-        <span class="md-label-medium text-on-surface-variant">Duration</span>
-        <p class="md-body-medium" id="sidebar-duration"></p>
-      </div>
-      <div>
-        <span class="md-label-medium text-on-surface-variant">File Size</span>
-        <p class="md-body-medium" id="sidebar-size"></p>
-      </div>
-      <div>
-        <span class="md-label-medium text-on-surface-variant">Elo Rating</span>
-        <p class="md-body-medium" id="sidebar-elo"></p>
-      </div>
-    </div>
-
-    <!-- Comments -->
-    <div style="border-top:1px solid var(--md-sys-color-outline-variant); padding-top:16px;">
-      <h3 class="md-title-medium" style="margin:0 0 12px;">Comments</h3>
-      <div id="comments-list" style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;"></div>
-
-      <!-- Add comment form -->
-      <div id="comment-form-area">
-        <textarea id="comment-text" placeholder="Leave a comment…"
-                  style="width:100%; min-height:72px; padding:10px 12px; border-radius:var(--md-sys-shape-corner-small);
-                         border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container);
-                         color:var(--md-sys-color-on-surface); font-family:var(--md-sys-typescale-font-family);
-                         font-size:14px; resize:vertical; box-sizing:border-box;"></textarea>
-        <div style="display:flex; align-items:center; gap:8px; margin-top:8px; flex-wrap:wrap;">
-          <input type="number" id="comment-timestamp" placeholder="Timestamp (s) optional" min="0" step="0.1"
-                 class="admin-compact-input" style="width:160px; flex-shrink:0;">
-          <button type="button" class="md-button-tonal" style="flex-shrink:0;" onclick="submitComment();">
-            <span class="material-symbols-outlined">send</span>
-            Post
-          </button>
-          <button type="button" class="md-button-text" style="font-size:13px; flex-shrink:0;" onclick="useVideoTimestamp();">
-            Use current time
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="md-sidebar-footer">
-    <a id="sidebar-download" href="#" class="md-button-outlined">
-      <span class="material-symbols-outlined">download</span>
-      Download
-    </a>
-    {% if is_owner %}
-    <button type="button" id="sidebar-delete-btn" class="md-button-text" style="color:var(--md-sys-color-error);">
-      <span class="material-symbols-outlined">delete</span>
-      Delete
-    </button>
-    {% endif %}
-  </div>
-</aside>
 
 <!-- Dialog: Delete Project Confirmation -->
 {% if is_owner %}
@@ -260,7 +109,7 @@
     </div>
     <h2 class="md-dialog-title">Delete Project?</h2>
     <div class="md-dialog-content">
-      This will permanently delete <strong>{{ project.name }}</strong> and all its videos. This action cannot be undone.
+      This will permanently delete <strong>{{ project.name }}</strong> and all its galleries and videos. This action cannot be undone.
     </div>
     <div class="md-dialog-actions">
       <button type="button" class="md-button-text" onclick="document.getElementById('delete-project-dialog').classList.remove('open');">
@@ -276,26 +125,36 @@
   </div>
 </div>
 
-<!-- Dialog: Delete Video Confirmation -->
-<div id="delete-video-dialog" class="md-dialog-overlay" onclick="if(event.target===this)this.classList.remove('open');">
+<!-- Dialog: Create Gallery -->
+<div id="create-gallery-dialog" class="md-dialog-overlay" onclick="if(event.target===this)this.classList.remove('open');">
   <div class="md-dialog">
-    <div class="md-dialog-icon">
-      <span class="material-symbols-outlined" style="color:var(--md-sys-color-error);">warning</span>
-    </div>
-    <h2 class="md-dialog-title">Delete Video?</h2>
+    <h2 class="md-dialog-title">New Gallery</h2>
     <div class="md-dialog-content">
-      This will permanently delete <strong id="delete-video-name"></strong>. This action cannot be undone.
+      <form id="create-gallery-form" method="post" action="{% url 'projects:gallery_create' project.pk %}">
+        {% csrf_token %}
+        <div class="form-section">
+          <div class="md-text-field">
+            <div class="md-text-field-container">
+              <input type="text" name="name" placeholder=" " required maxlength="255">
+              <label>Gallery Name</label>
+            </div>
+          </div>
+          <div class="md-text-field">
+            <div class="md-text-field-container">
+              <textarea name="description" rows="3" placeholder=" "></textarea>
+              <label>Description (optional)</label>
+            </div>
+          </div>
+        </div>
+      </form>
     </div>
     <div class="md-dialog-actions">
-      <button type="button" class="md-button-text" onclick="document.getElementById('delete-video-dialog').classList.remove('open');">
+      <button type="button" class="md-button-text" onclick="document.getElementById('create-gallery-dialog').classList.remove('open');">
         Cancel
       </button>
-      <form id="delete-video-form" method="post" action="" style="display:inline;">
-        {% csrf_token %}
-        <button type="submit" class="md-button-filled" style="background-color:var(--md-sys-color-error); color:var(--md-sys-color-on-error);">
-          Delete
-        </button>
-      </form>
+      <button type="submit" form="create-gallery-form" class="md-button-filled">
+        Create
+      </button>
     </div>
   </div>
 </div>
@@ -316,7 +175,7 @@
         {% for s in shares %}
         <div style="display:flex; align-items:center; gap:10px;">
           <span class="md-body-medium" style="flex:1;">{{ s.shared_with.username }}</span>
-          <span class="md-body-small text-on-surface-variant">{% if s.can_comment %}can comment{% else %}view only{% endif %}</span>
+          <span class="md-body-small text-on-surface-variant">{{ s.get_role_display }}</span>
           <form method="post" action="{% url 'projects:share_remove' project.pk s.pk %}">
             {% csrf_token %}
             <button type="submit" class="md-icon-button" title="Remove" style="color:var(--md-sys-color-error);">
@@ -340,51 +199,24 @@
             <label>Username</label>
           </div>
         </div>
-        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-          <input type="checkbox" name="can_comment" checked
-                 style="width:18px; height:18px; accent-color:var(--md-sys-color-primary);">
-          <span class="md-body-medium">Allow comments</span>
-        </label>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; padding:8px 12px; border-radius:var(--md-sys-shape-corner-small); border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container);">
+            <input type="radio" name="role" value="view" checked style="accent-color:var(--md-sys-color-primary);">
+            <span class="md-body-medium">View only</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; padding:8px 12px; border-radius:var(--md-sys-shape-corner-small); border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container);">
+            <input type="radio" name="role" value="rank" style="accent-color:var(--md-sys-color-primary);">
+            <span class="md-body-medium">View + Rank</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; padding:8px 12px; border-radius:var(--md-sys-shape-corner-small); border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container);">
+            <input type="radio" name="role" value="commentator" style="accent-color:var(--md-sys-color-primary);">
+            <span class="md-body-medium">Commentator</span>
+          </label>
+        </div>
         <button type="submit" class="md-button-tonal">
           <span class="material-symbols-outlined">person_add</span>
           Share
         </button>
-      </form>
-
-      <!-- Public share link -->
-      <hr class="md-divider" style="margin:20px 0 12px;">
-      <p class="md-label-medium text-on-surface-variant" style="margin-bottom:10px;">Create a public link</p>
-      <form method="post" action="{% url 'projects:share_link_create' project.pk %}" style="display:flex; flex-direction:column; gap:10px;">
-        {% csrf_token %}
-        <!-- Link type selection -->
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; padding:8px 12px;
-                        border-radius:var(--md-sys-shape-corner-small); border:1px solid var(--md-sys-color-outline);
-                        background:var(--md-sys-color-surface-container);">
-            <input type="radio" name="link_type" value="rank" checked style="accent-color:var(--md-sys-color-primary);">
-            <span class="md-body-medium">🏆 Ranking only</span>
-          </label>
-          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; padding:8px 12px;
-                        border-radius:var(--md-sys-shape-corner-small); border:1px solid var(--md-sys-color-outline);
-                        background:var(--md-sys-color-surface-container);">
-            <input type="radio" name="link_type" value="view" style="accent-color:var(--md-sys-color-primary);">
-            <span class="md-body-medium">🎥 View videos</span>
-          </label>
-          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; padding:8px 12px;
-                        border-radius:var(--md-sys-shape-corner-small); border:1px solid var(--md-sys-color-outline);
-                        background:var(--md-sys-color-surface-container);">
-            <input type="radio" name="link_type" value="both" style="accent-color:var(--md-sys-color-primary);">
-            <span class="md-body-medium">🔀 Both</span>
-          </label>
-        </div>
-        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-          <input type="password" name="password" placeholder="Password (optional)"
-                 class="admin-compact-input" style="flex:1; min-width:140px;" autocomplete="new-password">
-          <button type="submit" class="md-button-tonal" style="white-space:nowrap; flex-shrink:0;">
-            <span class="material-symbols-outlined">link</span>
-            Generate Link
-          </button>
-        </div>
       </form>
 
     </div>
@@ -396,17 +228,4 @@
   </div>
 </div>
 {% endif %}
-
-<!-- Page data for JS -->
-<script id="page-data" type="application/json">
-{
-  "projectPk": "{{ project.pk }}",
-  "isOwner": {% if is_owner %}true{% else %}false{% endif %},
-  "csrfToken": "{{ csrf_token }}"
-}
-</script>
-{% endblock %}
-
-{% block extra_js %}
-<script src="{% static 'js/video-manager.js' %}"></script>
 {% endblock %}

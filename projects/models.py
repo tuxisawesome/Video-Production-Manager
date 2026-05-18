@@ -27,12 +27,33 @@ class Project(models.Model):
         return self.name
 
 
-class Video(models.Model):
-    """A video recording belonging to a project."""
+class Gallery(models.Model):
+    """A gallery of videos within a project."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     project = models.ForeignKey(
         Project,
+        on_delete=models.CASCADE,
+        related_name="galleries",
+    )
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+
+    def __str__(self):
+        return f"{self.project.name} / {self.name}"
+
+
+class Video(models.Model):
+    """A video recording belonging to a gallery."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    gallery = models.ForeignKey(
+        Gallery,
         on_delete=models.CASCADE,
         related_name="videos",
     )
@@ -51,15 +72,29 @@ class Video(models.Model):
     def __str__(self):
         return self.filename_original or str(self.id)
 
+    @property
+    def project(self):
+        return self.gallery.project
+
+    @property
+    def project_id(self):
+        return self.gallery.project_id
+
     def save(self, *args, **kwargs):
         # On first save, ensure the file is stored under videos/<project_id>/<video_id>.webm
-        if self.file and not self.file.name.startswith(f"videos/{self.project_id}/"):
-            self.file.name = f"videos/{self.project_id}/{self.id}.webm"
+        if self.file and not self.file.name.startswith(f"videos/{self.gallery.project_id}/"):
+            self.file.name = f"videos/{self.gallery.project_id}/{self.id}.webm"
         super().save(*args, **kwargs)
 
 
 class ProjectShare(models.Model):
     """A project shared with a specific user."""
+
+    ROLE_CHOICES = [
+        ("view", "View only"),
+        ("rank", "View + Rank"),
+        ("commentator", "Commentator"),
+    ]
 
     project = models.ForeignKey(
         Project,
@@ -71,10 +106,7 @@ class ProjectShare(models.Model):
         on_delete=models.CASCADE,
         related_name="shared_projects",
     )
-    can_comment = models.BooleanField(
-        default=True,
-        help_text="Allow the shared user to leave comments on videos.",
-    )
+    role = models.CharField(max_length=15, choices=ROLE_CHOICES, default="view")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -82,7 +114,37 @@ class ProjectShare(models.Model):
         ordering = ["created_at"]
 
     def __str__(self):
-        return f"{self.project.name} → {self.shared_with.username}"
+        return f"{self.project.name} → {self.shared_with.username} ({self.role})"
+
+
+class GalleryShare(models.Model):
+    """A gallery shared with a specific user."""
+
+    ROLE_CHOICES = [
+        ("view", "View only"),
+        ("rank", "View + Rank"),
+        ("commentator", "Commentator"),
+    ]
+
+    gallery = models.ForeignKey(
+        Gallery,
+        on_delete=models.CASCADE,
+        related_name="shares",
+    )
+    shared_with = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="shared_galleries",
+    )
+    role = models.CharField(max_length=15, choices=ROLE_CHOICES, default="view")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("gallery", "shared_with")
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.gallery} → {self.shared_with.username} ({self.role})"
 
 
 class VideoComment(models.Model):
@@ -112,19 +174,31 @@ class VideoComment(models.Model):
 
 
 class ShareLink(models.Model):
-    """A password-optional public link to a project's ranking or a single video."""
+    """A password-optional public link to a project, gallery, or single video."""
 
-    RANK = "rank"
     VIEW = "view"
-    BOTH = "both"
-    LINK_TYPES = [(RANK, "Ranking only"), (VIEW, "View videos"), (BOTH, "View + Rank")]
+    RANK = "rank"
+    COMMENTATOR = "commentator"
+
+    ACCESS_TYPES = [
+        (VIEW, "View only"),
+        (RANK, "View + Rank"),
+        (COMMENTATOR, "Commentator (View, Rank, Comment, Download)"),
+    ]
 
     token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    link_type = models.CharField(max_length=10, choices=LINK_TYPES)
+    access_type = models.CharField(max_length=15, choices=ACCESS_TYPES, default=VIEW)
 
-    # Exactly one of project/video is set depending on link_type.
+    # Exactly one of project/gallery/video is set depending on the link target.
     project = models.ForeignKey(
         Project,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="share_links",
+    )
+    gallery = models.ForeignKey(
+        Gallery,
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -153,7 +227,23 @@ class ShareLink(models.Model):
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"{self.link_type} link – {self.token}"
+        return f"{self.access_type} link – {self.token}"
+
+    @property
+    def can_view(self):
+        return True
+
+    @property
+    def can_rank(self):
+        return self.access_type in (self.RANK, self.COMMENTATOR)
+
+    @property
+    def can_comment(self):
+        return self.access_type == self.COMMENTATOR
+
+    @property
+    def can_download(self):
+        return self.access_type == self.COMMENTATOR
 
     @property
     def has_password(self):

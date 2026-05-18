@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Rank Videos - {{ project.name }} - Video Production Manager{% endblock %}
+{% block title %}Rank Videos - {{ gallery.name }} - Video Production Manager{% endblock %}
 
 {% block content %}
 <div class="page-header">
   <div>
-    <a href="{% url 'projects:detail' project.pk %}" class="md-body-medium" style="display:inline-flex; align-items:center; gap:4px; margin-bottom:4px; color:var(--md-sys-color-primary);">
+    <a href="{% url 'projects:gallery_detail' project.pk gallery.pk %}" class="md-body-medium" style="display:inline-flex; align-items:center; gap:4px; margin-bottom:4px; color:var(--md-sys-color-primary);">
       <span class="material-symbols-outlined" style="font-size:18px;">arrow_back</span>
-      {{ project.name }}
+      {{ gallery.name }}
     </a>
-    <h1 class="page-title">Rank Videos - {{ project.name }}</h1>
+    <h1 class="page-title">Rank Videos - {{ gallery.name }}</h1>
   </div>
 </div>
 
@@ -88,11 +88,11 @@
       <span class="material-symbols-outlined">check_circle</span>
     </div>
     <h2 class="empty-state-title">All comparisons complete!</h2>
-    <p class="empty-state-description">Your videos have been ranked based on your preferences. View the results on the project page.</p>
+    <p class="empty-state-description">Your videos have been ranked based on your preferences. View the results on the gallery page.</p>
     <div class="empty-state-action">
-      <a href="{% url 'projects:detail' project.pk %}" class="md-button-filled">
+      <a href="{% url 'projects:gallery_detail' project.pk gallery.pk %}" class="md-button-filled">
         <span class="material-symbols-outlined">arrow_back</span>
-        Back to Project
+        Back to Gallery
       </a>
     </div>
   </div>
@@ -102,9 +102,9 @@
 {# ── Data for JavaScript ── #}
 <script id="page-data" type="application/json">
 {
-  "project_id": "{{ project.pk }}",
-  "next_pair_url": "{% url 'recording:next_pair' project.pk %}",
-  "submit_url": "{% url 'recording:submit_comparison' project.pk %}",
+  "gallery_id": "{{ gallery.pk }}",
+  "next_pair_url": "{% url 'recording:next_pair' gallery.pk %}",
+  "submit_url": "{% url 'recording:submit_comparison' gallery.pk %}",
   "csrf_token": "{{ csrf_token }}"
 }
 </script>

@@ -12,8 +12,8 @@ class RecordingSession(models.Model):
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    project = models.ForeignKey(
-        'projects.Project',
+    gallery = models.ForeignKey(
+        'projects.Gallery',
         on_delete=models.CASCADE,
         related_name='recording_sessions',
     )
@@ -36,11 +36,11 @@ class RecordingSession(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"Session {self.id} ({self.project})"
+        return f"Session {self.id} ({self.gallery})"
 
 
 class Comparison(models.Model):
-    """A head-to-head comparison between two videos in a project."""
+    """A head-to-head comparison between two videos in a gallery."""
 
     RESULT_CHOICES = [
         ('left', 'Left'),
@@ -49,8 +49,8 @@ class Comparison(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    project = models.ForeignKey(
-        'projects.Project',
+    gallery = models.ForeignKey(
+        'projects.Gallery',
         on_delete=models.CASCADE,
         related_name='comparisons',
     )

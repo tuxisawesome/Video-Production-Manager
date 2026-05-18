@@ -12,7 +12,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from projects.models import Project, Video
+from projects.models import Gallery, Video
 from recording.models import (
     Comparison,
     KeybindPreference,
@@ -29,17 +29,19 @@ from recording.ranking import get_ranking_progress, select_next_pair, update_elo
 
 @login_required
 @require_POST
-def start_session(request, project_id):
+def start_session(request, gallery_id):
     """Create a new RecordingSession and return its token + QR URL."""
-    project = get_object_or_404(Project, pk=project_id, owner=request.user)
+    gallery = get_object_or_404(Gallery, pk=gallery_id)
+    if gallery.project.owner != request.user:
+        return JsonResponse({'error': 'Permission denied.'}, status=403)
 
-    # Deactivate any existing sessions for this project/user.
+    # Deactivate any existing sessions for this gallery/user.
     RecordingSession.objects.filter(
-        project=project, user=request.user, is_active=True,
+        gallery=gallery, user=request.user, is_active=True,
     ).update(is_active=False)
 
     session = RecordingSession.objects.create(
-        project=project,
+        gallery=gallery,
         user=request.user,
         expires_at=timezone.now() + timedelta(hours=1),
     )
@@ -139,18 +141,19 @@ def phone_finalize(request, token):
         return JsonResponse({'error': 'No recording data found.'}, status=404)
 
     video_id = uuid.uuid4()
-    final_dir = os.path.join(settings.MEDIA_ROOT, 'videos', str(session.project_id))
+    project_id = session.gallery.project_id
+    final_dir = os.path.join(settings.MEDIA_ROOT, 'videos', str(project_id))
     os.makedirs(final_dir, exist_ok=True)
     final_path = os.path.join(final_dir, f'{video_id}.webm')
 
     shutil.move(temp_path, final_path)
 
-    relative_path = f'videos/{session.project_id}/{video_id}.webm'
+    relative_path = f'videos/{project_id}/{video_id}.webm'
     file_size = os.path.getsize(final_path)
 
     video = Video.objects.create(
         id=video_id,
-        project=session.project,
+        gallery=session.gallery,
         file=relative_path,
         filename_original=f'{video_id}.webm',
         file_size_bytes=file_size,
@@ -180,24 +183,30 @@ def phone_discard(request, token):
 
 @login_required
 @require_GET
-def rank_view(request, project_id):
+def rank_view(request, gallery_id):
     """Render the ranking comparison page."""
-    project = get_object_or_404(Project, pk=project_id, owner=request.user)
-    progress = get_ranking_progress(project_id)
+    gallery = get_object_or_404(Gallery, pk=gallery_id)
+    if gallery.project.owner != request.user:
+        from django.http import Http404
+        raise Http404
+    progress = get_ranking_progress(gallery_id)
     return render(request, 'recording/rank.html', {
-        'project': project,
+        'gallery': gallery,
+        'project': gallery.project,
         'progress': progress,
     })
 
 
 @login_required
 @require_GET
-def next_pair(request, project_id):
+def next_pair(request, gallery_id):
     """Return the next pair of videos to compare, or signal completion."""
-    get_object_or_404(Project, pk=project_id, owner=request.user)
+    gallery = get_object_or_404(Gallery, pk=gallery_id)
+    if gallery.project.owner != request.user:
+        return JsonResponse({'error': 'Permission denied.'}, status=403)
 
-    progress = get_ranking_progress(project_id)
-    pair = select_next_pair(project_id)
+    progress = get_ranking_progress(gallery_id)
+    pair = select_next_pair(gallery_id)
     if pair is None:
         return JsonResponse({'complete': True, 'progress': progress})
 
@@ -206,13 +215,13 @@ def next_pair(request, project_id):
         'complete': False,
         'video_left': {
             'id': str(video_a.id),
-            'url': reverse('projects:video_stream', args=[project_id, video_a.id]),
+            'url': reverse('projects:video_stream', args=[gallery.project_id, gallery.id, video_a.id]),
             'name': video_a.filename_original or str(video_a.id),
             'elo': round(video_a.elo_rating, 1),
         },
         'video_right': {
             'id': str(video_b.id),
-            'url': reverse('projects:video_stream', args=[project_id, video_b.id]),
+            'url': reverse('projects:video_stream', args=[gallery.project_id, gallery.id, video_b.id]),
             'name': video_b.filename_original or str(video_b.id),
             'elo': round(video_b.elo_rating, 1),
         },
@@ -222,9 +231,11 @@ def next_pair(request, project_id):
 
 @login_required
 @require_POST
-def submit_comparison(request, project_id):
+def submit_comparison(request, gallery_id):
     """Accept a comparison result, create the record, and update Elo."""
-    project = get_object_or_404(Project, pk=project_id, owner=request.user)
+    gallery = get_object_or_404(Gallery, pk=gallery_id)
+    if gallery.project.owner != request.user:
+        return JsonResponse({'error': 'Permission denied.'}, status=403)
 
     try:
         data = json.loads(request.body)
@@ -238,11 +249,11 @@ def submit_comparison(request, project_id):
     if result not in ('left', 'right', 'equal'):
         return JsonResponse({'error': 'Invalid result.'}, status=400)
 
-    video_left = get_object_or_404(Video, pk=video_left_id, project=project)
-    video_right = get_object_or_404(Video, pk=video_right_id, project=project)
+    video_left = get_object_or_404(Video, pk=video_left_id, gallery=gallery)
+    video_right = get_object_or_404(Video, pk=video_right_id, gallery=gallery)
 
     Comparison.objects.create(
-        project=project,
+        gallery=gallery,
         video_left=video_left,
         video_right=video_right,
         result=result,
@@ -332,9 +343,13 @@ def recording_settings_view(request):
 
 @login_required
 @require_GET
-def record_control(request, project_id):
+def record_control(request, gallery_id):
     """Render the desktop recording control page."""
-    project = get_object_or_404(Project, pk=project_id, owner=request.user)
+    gallery = get_object_or_404(Gallery, pk=gallery_id)
+    if gallery.project.owner != request.user:
+        from django.http import Http404
+        raise Http404
     return render(request, 'recording/record_control.html', {
-        'project': project,
+        'gallery': gallery,
+        'project': gallery.project,
     })

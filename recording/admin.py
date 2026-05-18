@@ -10,17 +10,17 @@ from recording.models import (
 
 @admin.register(RecordingSession)
 class RecordingSessionAdmin(admin.ModelAdmin):
-    list_display = ('id', 'project', 'user', 'is_active', 'created_at', 'expires_at')
+    list_display = ('id', 'gallery', 'user', 'is_active', 'created_at', 'expires_at')
     list_filter = ('is_active',)
-    search_fields = ('token', 'user__username', 'project__name')
+    search_fields = ('token', 'user__username', 'gallery__name')
     readonly_fields = ('id', 'token', 'created_at')
 
 
 @admin.register(Comparison)
 class ComparisonAdmin(admin.ModelAdmin):
-    list_display = ('id', 'project', 'video_left', 'video_right', 'result', 'user', 'created_at')
+    list_display = ('id', 'gallery', 'video_left', 'video_right', 'result', 'user', 'created_at')
     list_filter = ('result',)
-    search_fields = ('project__name', 'user__username')
+    search_fields = ('gallery__name', 'user__username')
     readonly_fields = ('id', 'created_at')
 
 

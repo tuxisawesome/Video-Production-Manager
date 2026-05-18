@@ -47,9 +47,9 @@ def update_elo(video_left, video_right, result):
     )
 
 
-def select_next_pair(project_id):
+def select_next_pair(gallery_id):
     """
-    Select the next pair of videos to compare for a project.
+    Select the next pair of videos to compare for a gallery.
 
     Strategy:
         1. Prioritise least-compared videos.
@@ -59,7 +59,7 @@ def select_next_pair(project_id):
         A tuple (video_a, video_b) or None if fewer than 2 videos exist.
     """
     videos = list(
-        Video.objects.filter(project_id=project_id).order_by('comparison_count', '?')
+        Video.objects.filter(gallery_id=gallery_id).order_by('comparison_count', '?')
     )
 
     if len(videos) < 2:
@@ -67,7 +67,7 @@ def select_next_pair(project_id):
 
     # Build a set of already-compared pairs for quick lookup.
     compared_pairs = set()
-    comparisons = Comparison.objects.filter(project_id=project_id).values_list(
+    comparisons = Comparison.objects.filter(gallery_id=gallery_id).values_list(
         'video_left_id', 'video_right_id',
     )
     for left_id, right_id in comparisons:
@@ -85,17 +85,17 @@ def select_next_pair(project_id):
     return (videos[0], videos[1])
 
 
-def get_ranking_progress(project_id):
+def get_ranking_progress(gallery_id):
     """
-    Return ranking progress for a project.
+    Return ranking progress for a gallery.
 
     Returns:
         dict with keys: completed, total, percent.
         total is n*(n-1)/2 (every unique pair once).
     """
-    n = Video.objects.filter(project_id=project_id).count()
+    n = Video.objects.filter(gallery_id=gallery_id).count()
     total = n * (n - 1) // 2
-    completed = Comparison.objects.filter(project_id=project_id).count()
+    completed = Comparison.objects.filter(gallery_id=gallery_id).count()
     percent = round((completed / total) * 100, 1) if total > 0 else 0.0
 
     return {

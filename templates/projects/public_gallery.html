@@ -1,16 +1,22 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}{{ project.name }} – Shared Videos{% endblock %}
+{% block title %}{{ gallery.name }} – {{ project.name }} – Shared Videos{% endblock %}
 
 {% block content %}
 <div class="page-header">
   <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
     <div>
-      <h1 class="page-title">{{ project.name }}</h1>
-      <p class="page-subtitle" style="margin:0;">Shared video gallery · {{ videos|length }} video{{ videos|length|pluralize }}</p>
+      {% if link.project_id %}
+      <a href="{% url 'projects:public_project' token %}" class="md-body-medium" style="display:inline-flex; align-items:center; gap:4px; margin-bottom:4px; color:var(--md-sys-color-primary);">
+        <span class="material-symbols-outlined" style="font-size:18px;">arrow_back</span>
+        {{ project.name }}
+      </a>
+      {% endif %}
+      <h1 class="page-title">{{ gallery.name }}</h1>
+      <p class="page-subtitle" style="margin:0;">Shared gallery · {{ videos|length }} video{{ videos|length|pluralize }}</p>
     </div>
-    {% if link.link_type == 'both' %}
+    {% if link.can_rank %}
       <a href="{% url 'projects:public_rank' token %}" class="md-button-tonal" style="margin-left:auto;">
         <span class="material-symbols-outlined">leaderboard</span>
         Rank Videos
@@ -47,6 +53,14 @@
               <span>{{ video.created_at|date:"M j, Y" }}</span>
             </div>
           </div>
+          {% if link.can_download %}
+          <div style="padding:4px 12px 12px;" onclick="event.stopPropagation();">
+            <a href="{% url 'projects:public_gallery_video_stream' token video.pk %}?download=1"
+               class="md-icon-button" title="Download">
+              <span class="material-symbols-outlined">download</span>
+            </a>
+          </div>
+          {% endif %}
         </div>
       {% endfor %}
     </div>
@@ -56,7 +70,7 @@
         <span class="material-symbols-outlined">videocam</span>
       </div>
       <h2 class="empty-state-title">No videos yet</h2>
-      <p class="empty-state-description">This project doesn't have any videos yet.</p>
+      <p class="empty-state-description">This gallery doesn't have any videos yet.</p>
     </div>
   {% endif %}
 </div>
@@ -71,6 +85,11 @@
       </button>
     </div>
     <video id="gallery-modal-player" controls style="width:100%; aspect-ratio:16/9; background:#000; display:block;"></video>
+    {% if link.can_comment %}
+    <div style="padding:16px;">
+      <div id="public-comments-list" style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;"></div>
+    </div>
+    {% endif %}
   </div>
 </div>
 

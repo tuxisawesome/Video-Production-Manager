@@ -28,8 +28,8 @@
           {% endif %}
           <div class="flex items-center gap-sm" style="margin-top:auto;">
             <span class="md-label-medium text-on-surface-variant">
-              <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">videocam</span>
-              {{ project.videos.count }} video{{ project.videos.count|pluralize }}
+              <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">photo_library</span>
+              {{ project.galleries.count }} galler{{ project.galleries.count|pluralize:"y,ies" }}
             </span>
             <span class="md-label-medium text-on-surface-variant" style="margin-left:auto;">
               Updated {{ project.updated_at|timesince }} ago
@@ -75,8 +75,8 @@
         {% endif %}
         <div class="flex items-center gap-sm" style="margin-top:auto;">
           <span class="md-label-medium text-on-surface-variant">
-            <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">videocam</span>
-            {{ project.videos.count }} video{{ project.videos.count|pluralize }}
+            <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">photo_library</span>
+            {{ project.galleries.count }} galler{{ project.galleries.count|pluralize:"y,ies" }}
           </span>
         </div>
       </a>

@@ -12,9 +12,32 @@
   <div class="md-card-elevated" style="overflow:hidden;">
     <video controls style="width:100%; aspect-ratio:16/9; background:#000; display:block;"
            src="{% url 'projects:public_video_stream' link.token %}"></video>
-    <div style="padding:16px 20px;">
-      <span class="md-body-small text-on-surface-variant">Shared video · Elo {{ video.elo_rating|floatformat:0 }}</span>
+    <div style="padding:16px 20px; display:flex; align-items:center; gap:16px;">
+      <span class="md-body-small text-on-surface-variant" style="flex:1;">Shared video · Elo {{ video.elo_rating|floatformat:0 }}</span>
+      {% if link.can_download %}
+      <a href="{% url 'projects:public_video_stream' link.token %}?download=1" class="md-button-outlined">
+        <span class="material-symbols-outlined">download</span>
+        Download
+      </a>
+      {% endif %}
     </div>
   </div>
+
+  {% if link.can_comment %}
+  <div class="md-card-elevated" style="margin-top:20px; padding:20px;">
+    <h2 class="md-title-medium" style="margin:0 0 16px;">Comments</h2>
+    <div id="comments-list" style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;"></div>
+    <div>
+      <textarea id="comment-text" placeholder="Leave a comment…"
+                style="width:100%; min-height:72px; padding:10px 12px; border-radius:var(--md-sys-shape-corner-small);
+                       border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container);
+                       color:var(--md-sys-color-on-surface); font-size:14px; resize:vertical; box-sizing:border-box;"></textarea>
+      <button type="button" class="md-button-tonal" style="margin-top:8px;" onclick="submitComment();">
+        <span class="material-symbols-outlined">send</span>
+        Post
+      </button>
+    </div>
+  </div>
+  {% endif %}
 </div>
 {% endblock %}

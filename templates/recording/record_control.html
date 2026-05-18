@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Recording - {{ project.name }} - Video Production Manager{% endblock %}
+{% block title %}Recording - {{ gallery.name }} - Video Production Manager{% endblock %}
 
 {% block content %}
 <div class="page-header">
   <div>
-    <a href="{% url 'projects:detail' project.pk %}" class="md-body-medium" style="display:inline-flex; align-items:center; gap:4px; margin-bottom:4px; color:var(--md-sys-color-primary);">
+    <a href="{% url 'projects:gallery_detail' project.pk gallery.pk %}" class="md-body-medium" style="display:inline-flex; align-items:center; gap:4px; margin-bottom:4px; color:var(--md-sys-color-primary);">
       <span class="material-symbols-outlined" style="font-size:18px;">arrow_back</span>
-      {{ project.name }}
+      {{ gallery.name }}
     </a>
-    <h1 class="page-title">Recording - {{ project.name }}</h1>
+    <h1 class="page-title">Recording - {{ gallery.name }}</h1>
   </div>
 </div>
 
@@ -117,7 +117,7 @@
       <hr class="md-divider" style="margin-bottom:16px;">
 
       {# End session button #}
-      <a href="{% url 'projects:detail' project.pk %}" class="md-button-outlined" style="width:100%; justify-content:center;">
+      <a href="{% url 'projects:gallery_detail' project.pk gallery.pk %}" class="md-button-outlined" style="width:100%; justify-content:center;">
         <span class="material-symbols-outlined">stop</span>
         End Session
       </a>
@@ -130,9 +130,9 @@
 {# ── Data for JavaScript ── #}
 <script id="page-data" type="application/json">
 {
-  "project_id": "{{ project.pk }}",
+  "gallery_id": "{{ gallery.pk }}",
   "session_id": "",
-  "start_session_url": "{% url 'recording:start_session' project.pk %}",
+  "start_session_url": "{% url 'recording:start_session' gallery.pk %}",
   "keybinds_url": "{% url 'recording:keybind_view' %}",
   "settings_url": "{% url 'recording:recording_settings_view' %}",
   "domain": "{{ request.get_host }}",

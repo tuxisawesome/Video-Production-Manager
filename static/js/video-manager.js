@@ -47,6 +47,7 @@ let _currentCard = null;
 let _commentListUrl   = '';
 let _commentCreateUrl = '';
 let _currentProjectPk = '';
+let _currentGalleryPk = '';
 let _currentVideoId   = '';
 
 // ---------------------------------------------------------------------------
@@ -83,6 +84,7 @@ function openSidebar(cardEl) {
     _commentListUrl       = cardEl.dataset.commentUrl || '';
     _commentCreateUrl     = cardEl.dataset.commentCreateUrl || '';
     _currentProjectPk     = cardEl.dataset.projectPk || '';
+    _currentGalleryPk     = cardEl.dataset.galleryPk || '';
     _currentVideoId       = videoId;
 
     // Set video player source
@@ -205,7 +207,7 @@ async function submitComment() {
 }
 
 async function deleteComment(commentId) {
-    const deleteUrl = `/projects/${_currentProjectPk}/videos/${_currentVideoId}/comments/${commentId}/delete/`;
+    const deleteUrl = `/projects/${_currentProjectPk}/galleries/${_currentGalleryPk}/videos/${_currentVideoId}/comments/${commentId}/delete/`;
     try {
         const resp = await fetch(deleteUrl, {
             method: 'POST',

@@ -52,6 +52,34 @@
     </div>
   </div>
 
+  <!-- Active project share links -->
+  {% if is_owner and share_links %}
+  <div class="md-card-elevated" style="padding:16px 20px; margin-bottom:20px;">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+      <span class="material-symbols-outlined" style="font-size:20px;">link</span>
+      <span class="md-title-medium">Active Share Links</span>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      {% for sl in share_links %}
+      <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+        <span class="md-chip" style="background:var(--md-sys-color-secondary-container); color:var(--md-sys-color-on-secondary-container);">
+          {{ sl.get_access_type_display }}{% if sl.has_password %} 🔒{% endif %}
+        </span>
+        <input type="text" readonly value="{{ request.scheme }}://{{ request.get_host }}{% url 'projects:share_gate' sl.token %}"
+               class="admin-compact-input" style="flex:1; min-width:180px; font-size:12px; font-family:monospace; cursor:pointer;"
+               onclick="this.select(); document.execCommand('copy');" title="Click to copy">
+        <form method="post" action="{% url 'projects:share_link_delete' project.pk sl.token %}" style="display:inline;">
+          {% csrf_token %}
+          <button type="submit" class="md-icon-button" title="Delete link" style="color:var(--md-sys-color-error);">
+            <span class="material-symbols-outlined">delete</span>
+          </button>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
   <!-- Gallery Grid -->
   {% if galleries %}
     <div class="grid-container">
@@ -217,6 +245,35 @@
           <span class="material-symbols-outlined">person_add</span>
           Share
         </button>
+      </form>
+
+      <!-- Public share link -->
+      <hr class="md-divider" style="margin:20px 0 12px;">
+      <p class="md-label-medium text-on-surface-variant" style="margin-bottom:10px;">Create a public link</p>
+      <form method="post" action="{% url 'projects:share_link_create' project.pk %}" style="display:flex; flex-direction:column; gap:10px;">
+        {% csrf_token %}
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; padding:8px 12px; border-radius:var(--md-sys-shape-corner-small); border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container);">
+            <input type="radio" name="access_type" value="view" checked style="accent-color:var(--md-sys-color-primary);">
+            <span class="md-body-medium">View only</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; padding:8px 12px; border-radius:var(--md-sys-shape-corner-small); border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container);">
+            <input type="radio" name="access_type" value="rank" style="accent-color:var(--md-sys-color-primary);">
+            <span class="md-body-medium">View + Rank</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; padding:8px 12px; border-radius:var(--md-sys-shape-corner-small); border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container);">
+            <input type="radio" name="access_type" value="commentator" style="accent-color:var(--md-sys-color-primary);">
+            <span class="md-body-medium">Commentator</span>
+          </label>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <input type="password" name="password" placeholder="Password (optional)"
+                 class="admin-compact-input" style="flex:1; min-width:140px;" autocomplete="new-password">
+          <button type="submit" class="md-button-tonal" style="white-space:nowrap; flex-shrink:0;">
+            <span class="material-symbols-outlined">link</span>
+            Generate Link
+          </button>
+        </div>
       </form>
 
     </div>

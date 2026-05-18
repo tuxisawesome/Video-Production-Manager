@@ -8,6 +8,12 @@ const _pageData = JSON.parse(document.getElementById('page-data')?.textContent |
 const _isOwner  = _pageData.isOwner !== false;
 const _csrfToken = _pageData.csrfToken || '';
 
+// URL templates (placeholder UUID replaced with actual video/token ID at runtime)
+const _PLACEHOLDER = '00000000-0000-0000-0000-000000000000';
+const _videoShareListBase   = _pageData.videoShareListBaseUrl   || '';
+const _videoShareCreateBase = _pageData.videoShareCreateBaseUrl || '';
+const _shareLinkDeleteBase  = _pageData.shareLinkDeleteBaseUrl  || '';
+
 function getCSRFToken() {
     return _csrfToken ||
         document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
@@ -116,6 +122,9 @@ function openSidebar(cardEl) {
 
     // Load comments
     if (_commentListUrl) loadComments();
+
+    // Load video share links (owner only)
+    if (_isOwner && _videoShareListBase) loadVideoShareLinks();
 
     // Show sidebar
     sidebar.classList.add('open');
@@ -230,6 +239,102 @@ function useVideoTimestamp() {
 }
 
 // ---------------------------------------------------------------------------
+// Video share links (owner sidebar)
+// ---------------------------------------------------------------------------
+
+function _videoShareUrl(baseTemplate, videoId) {
+    return baseTemplate.replace(_PLACEHOLDER, videoId);
+}
+
+async function loadVideoShareLinks() {
+    const container = document.getElementById('video-share-links');
+    if (!container || !_currentVideoId || !_videoShareListBase) return;
+    try {
+        const url = _videoShareUrl(_videoShareListBase, _currentVideoId);
+        const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        if (!resp.ok) return;
+        const { links } = await resp.json();
+        renderVideoShareLinks(links);
+    } catch (e) {
+        console.error('[Share] load error', e);
+    }
+}
+
+function renderVideoShareLinks(links) {
+    const container = document.getElementById('video-share-links');
+    if (!container) return;
+    if (!links.length) {
+        container.innerHTML = '<span class="md-body-small text-on-surface-variant">No share links yet.</span>';
+        return;
+    }
+    container.innerHTML = links.map(sl => `
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <span class="md-chip" style="background:var(--md-sys-color-secondary-container); color:var(--md-sys-color-on-secondary-container); font-size:12px; white-space:nowrap;">
+            ${escapeHtml(sl.access_type_display)}${sl.has_password ? ' 🔒' : ''}
+          </span>
+          <input type="text" readonly value="${escapeHtml(sl.url)}"
+                 style="flex:1; min-width:0; font-size:11px; font-family:monospace; padding:4px 8px;
+                        border:1px solid var(--md-sys-color-outline-variant); border-radius:4px;
+                        background:var(--md-sys-color-surface-container); color:var(--md-sys-color-on-surface);
+                        cursor:pointer;"
+                 onclick="this.select(); document.execCommand('copy');" title="Click to copy">
+          <button class="md-icon-button" style="color:var(--md-sys-color-error); flex-shrink:0;"
+                  onclick="deleteVideoShareLink('${escapeHtml(sl.token)}')" title="Delete">
+            <span class="material-symbols-outlined" style="font-size:18px;">delete</span>
+          </button>
+        </div>`).join('');
+}
+
+async function createVideoShareLink() {
+    if (!_currentVideoId || !_videoShareCreateBase) return;
+    const accessType = document.querySelector('input[name="vsl_access"]:checked')?.value || 'view';
+    const password   = document.getElementById('vsl-password')?.value.trim() || '';
+
+    const url = _videoShareUrl(_videoShareCreateBase, _currentVideoId);
+    try {
+        const resp = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken(),
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: JSON.stringify({ access_type: accessType, password }),
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            alert(err.error || 'Failed to create share link.');
+            return;
+        }
+        const sl = await resp.json();
+        if (document.getElementById('vsl-password')) {
+            document.getElementById('vsl-password').value = '';
+        }
+        // Reload the list to show the new link
+        loadVideoShareLinks();
+    } catch (e) {
+        console.error('[Share] create error', e);
+    }
+}
+
+async function deleteVideoShareLink(token) {
+    if (!_shareLinkDeleteBase || !_pageData.projectPk) return;
+    const url = _shareLinkDeleteBase.replace(_PLACEHOLDER, token);
+    try {
+        const resp = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCSRFToken(),
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+        if (resp.ok) loadVideoShareLinks();
+    } catch (e) {
+        console.error('[Share] delete error', e);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Delete video confirmation
 // ---------------------------------------------------------------------------
 
@@ -313,12 +418,14 @@ if (deleteProjectDialog) {
 // Expose globals
 // ---------------------------------------------------------------------------
 
-window.openSidebar        = openSidebar;
-window.closeSidebar       = closeSidebar;
-window.confirmDeleteVideo = confirmDeleteVideo;
-window.formatBytes        = formatBytes;
-window.submitComment      = submitComment;
-window.deleteComment      = deleteComment;
-window.seekToTimestamp    = seekToTimestamp;
-window.useVideoTimestamp  = useVideoTimestamp;
-window.showCopied         = showCopied;
+window.openSidebar           = openSidebar;
+window.closeSidebar          = closeSidebar;
+window.confirmDeleteVideo    = confirmDeleteVideo;
+window.formatBytes           = formatBytes;
+window.submitComment         = submitComment;
+window.deleteComment         = deleteComment;
+window.seekToTimestamp       = seekToTimestamp;
+window.useVideoTimestamp     = useVideoTimestamp;
+window.showCopied            = showCopied;
+window.createVideoShareLink  = createVideoShareLink;
+window.deleteVideoShareLink  = deleteVideoShareLink;

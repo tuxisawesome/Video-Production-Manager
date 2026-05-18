@@ -262,6 +262,34 @@
       <div id="comments-list" style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;"></div>
     </div>
     {% endif %}
+
+    <!-- Video share links (owner only) -->
+    {% if is_owner %}
+    <div style="border-top:1px solid var(--md-sys-color-outline-variant); padding-top:16px; margin-top:8px;">
+      <h3 class="md-title-medium" style="margin:0 0 10px;">Share this Video</h3>
+      <div id="video-share-links" style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;">
+        <span class="md-body-small text-on-surface-variant">Loading…</span>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+        <label style="display:flex; align-items:center; gap:5px; cursor:pointer; padding:6px 10px; border-radius:var(--md-sys-shape-corner-small); border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container); font-size:13px;">
+          <input type="radio" name="vsl_access" value="view" checked style="accent-color:var(--md-sys-color-primary);">
+          View only
+        </label>
+        <label style="display:flex; align-items:center; gap:5px; cursor:pointer; padding:6px 10px; border-radius:var(--md-sys-shape-corner-small); border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container); font-size:13px;">
+          <input type="radio" name="vsl_access" value="commentator" style="accent-color:var(--md-sys-color-primary);">
+          Commentator
+        </label>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <input type="password" id="vsl-password" placeholder="Password (optional)"
+               class="admin-compact-input" style="flex:1; min-width:0;" autocomplete="new-password">
+        <button type="button" class="md-button-tonal" style="flex-shrink:0; white-space:nowrap;" onclick="createVideoShareLink();">
+          <span class="material-symbols-outlined">link</span>
+          Generate
+        </button>
+      </div>
+    </div>
+    {% endif %}
   </div>
   <div class="md-sidebar-footer">
     {% if is_owner or role == 'commentator' %}
@@ -449,6 +477,9 @@
   "canComment": {% if is_owner or role == 'commentator' %}true{% else %}false{% endif %},
   "canDownload": {% if is_owner or role == 'commentator' %}true{% else %}false{% endif %},
   "deleteVideoBaseUrl": "{% url 'projects:video_delete' project.pk gallery.pk '00000000-0000-0000-0000-000000000000' %}",
+  "videoShareListBaseUrl": "{% url 'projects:video_share_link_list' project.pk gallery.pk '00000000-0000-0000-0000-000000000000' %}",
+  "videoShareCreateBaseUrl": "{% url 'projects:video_share_link_create' project.pk gallery.pk '00000000-0000-0000-0000-000000000000' %}",
+  "shareLinkDeleteBaseUrl": "{% url 'projects:share_link_delete' project.pk '00000000-0000-0000-0000-000000000000' %}",
   "csrfToken": "{{ csrf_token }}"
 }
 </script>

@@ -115,12 +115,14 @@ def project_detail(request, pk):
     project, is_owner = _get_accessible_project(request.user, pk)
     galleries = project.galleries.all()
     shares = project.shares.select_related("shared_with").all() if is_owner else []
+    share_links = project.share_links.all() if is_owner else []
 
     return render(request, "projects/project_detail.html", {
         "project": project,
         "is_owner": is_owner,
         "galleries": galleries,
         "shares": shares,
+        "share_links": share_links,
     })
 
 
@@ -625,8 +627,19 @@ def video_share_link_create_view(request, pk, gallery_pk, video_id):
     project = get_object_or_404(Project, pk=pk, owner=request.user)
     gallery = get_object_or_404(Gallery, pk=gallery_pk, project=project)
     video = get_object_or_404(Video, pk=video_id, gallery=gallery)
-    access_type = request.POST.get("access_type", ShareLink.VIEW)
-    raw_password = request.POST.get("password", "").strip()
+
+    is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
+    if is_ajax:
+        try:
+            body = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON."}, status=400)
+        access_type = body.get("access_type", ShareLink.VIEW)
+        raw_password = body.get("password", "").strip()
+    else:
+        access_type = request.POST.get("access_type", ShareLink.VIEW)
+        raw_password = request.POST.get("password", "").strip()
 
     # Video links don't support rank.
     if access_type not in (ShareLink.VIEW, ShareLink.COMMENTATOR):
@@ -635,8 +648,41 @@ def video_share_link_create_view(request, pk, gallery_pk, video_id):
     link = ShareLink(access_type=access_type, video=video, created_by=request.user)
     link.set_password(raw_password)
     link.save()
+
+    if is_ajax:
+        return JsonResponse({
+            "token": str(link.token),
+            "access_type_display": link.get_access_type_display(),
+            "has_password": link.has_password,
+            "url": request.build_absolute_uri(
+                _url_reverse("projects:share_gate", args=[link.token])
+            ),
+        })
+
     messages.success(request, "Share link created.")
     return redirect("projects:gallery_detail", pk=pk, gallery_pk=gallery_pk)
+
+
+@login_required
+@require_GET
+def video_share_link_list_view(request, pk, gallery_pk, video_id):
+    """Return existing share links for a video as JSON (owner only)."""
+    project = get_object_or_404(Project, pk=pk, owner=request.user)
+    gallery = get_object_or_404(Gallery, pk=gallery_pk, project=project)
+    video = get_object_or_404(Video, pk=video_id, gallery=gallery)
+    links = [
+        {
+            "token": str(sl.token),
+            "access_type_display": sl.get_access_type_display(),
+            "has_password": sl.has_password,
+            "url": request.build_absolute_uri(
+                _url_reverse("projects:share_gate", args=[sl.token])
+            ),
+            "delete_url": _url_reverse("projects:share_link_delete", args=[pk, sl.token]),
+        }
+        for sl in video.share_links.all()
+    ]
+    return JsonResponse({"links": links})
 
 
 @login_required
@@ -644,7 +690,6 @@ def video_share_link_create_view(request, pk, gallery_pk, video_id):
 def share_link_delete_view(request, pk, token):
     """Delete a share link owned by the user."""
     project = get_object_or_404(Project, pk=pk, owner=request.user)
-    # Link may be project, gallery, or video level — find it and verify ownership.
     link = get_object_or_404(ShareLink, token=token)
     # Ensure the link belongs to this project (directly or via gallery/video).
     is_mine = False
@@ -656,9 +701,19 @@ def share_link_delete_view(request, pk, token):
         is_mine = True
     if not is_mine:
         raise Http404
+
+    # Capture redirect target before deletion.
+    gallery_pk = link.gallery_id or (link.video.gallery_id if link.video_id else None)
+    is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
     link.delete()
+
+    if is_ajax:
+        return JsonResponse({"success": True})
+
     messages.success(request, "Share link deleted.")
-    # Redirect back to where the link was created from.
+    if gallery_pk:
+        return redirect("projects:gallery_detail", pk=pk, gallery_pk=gallery_pk)
     return redirect("projects:detail", pk=pk)
 
 

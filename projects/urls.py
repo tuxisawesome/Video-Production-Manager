@@ -58,6 +58,11 @@ urlpatterns = [
         name="video_delete",
     ),
     path(
+        "<uuid:pk>/galleries/<uuid:gallery_pk>/videos/<uuid:video_id>/share-links/",
+        views.video_share_link_list_view,
+        name="video_share_link_list",
+    ),
+    path(
         "<uuid:pk>/galleries/<uuid:gallery_pk>/videos/<uuid:video_id>/share-links/create/",
         views.video_share_link_create_view,
         name="video_share_link_create",

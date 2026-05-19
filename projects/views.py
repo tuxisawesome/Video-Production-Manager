@@ -198,7 +198,10 @@ def gallery_detail(request, pk, gallery_pk):
     gallery, role = _get_accessible_gallery(request.user, pk, gallery_pk)
     is_owner = role == 'owner'
     project = gallery.project
-    videos = gallery.videos.order_by("-elo_rating")
+    if is_owner:
+        videos = gallery.videos.prefetch_related('share_links').order_by("-elo_rating")
+    else:
+        videos = gallery.videos.order_by("-elo_rating")
     upload_form = VideoUploadForm()
     site_settings = SiteSettings.load()
     shares = project.shares.select_related("shared_with").all() if is_owner else []
@@ -657,6 +660,7 @@ def video_share_link_create_view(request, pk, gallery_pk, video_id):
             "url": request.build_absolute_uri(
                 _url_reverse("projects:share_gate", args=[link.token])
             ),
+            "delete_url": _url_reverse("projects:share_link_delete", args=[pk, link.token]),
         })
 
     messages.success(request, "Share link created.")

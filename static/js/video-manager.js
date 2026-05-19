@@ -48,12 +48,11 @@ const commentTs     = document.getElementById('comment-timestamp');
 
 // Current sidebar state
 let _currentCard = null;
-let _commentListUrl    = '';
-let _commentCreateUrl  = '';
-let _currentProjectPk  = '';
-let _currentGalleryPk  = '';
-let _currentVideoId    = '';
-let _videoShareListUrl = '';    // per-video, set from card data attribute
+let _commentListUrl      = '';
+let _commentCreateUrl    = '';
+let _currentProjectPk    = '';
+let _currentGalleryPk    = '';
+let _currentVideoId      = '';
 let _videoShareCreateUrl = '';  // per-video, set from card data attribute
 
 // ---------------------------------------------------------------------------
@@ -92,7 +91,6 @@ function openSidebar(cardEl) {
     _currentProjectPk    = cardEl.dataset.projectPk || '';
     _currentGalleryPk    = cardEl.dataset.galleryPk || '';
     _currentVideoId      = videoId;
-    _videoShareListUrl   = cardEl.dataset.shareListUrl || '';
     _videoShareCreateUrl = cardEl.dataset.shareCreateUrl || '';
 
     // Set video player source
@@ -125,8 +123,23 @@ function openSidebar(cardEl) {
     // Load comments
     if (_commentListUrl) loadComments();
 
-    // Load video share links (owner only, URL provided by card data attribute)
-    if (_isOwner && _videoShareListUrl) loadVideoShareLinks();
+    // Render video share links synchronously from embedded JSON in the card
+    if (_isOwner) {
+        const slDataEl = cardEl.querySelector('.vsl-data');
+        const vslContainer = document.getElementById('video-share-links');
+        if (vslContainer) {
+            if (slDataEl) {
+                try {
+                    renderVideoShareLinks(JSON.parse(slDataEl.textContent));
+                } catch (e) {
+                    renderVideoShareLinks([]);
+                    console.error('[Share] JSON parse error', e);
+                }
+            } else {
+                renderVideoShareLinks([]);
+            }
+        }
+    }
 
     // Show sidebar
     sidebar.classList.add('open');
@@ -244,55 +257,15 @@ function useVideoTimestamp() {
 // Video share links (owner sidebar)
 // ---------------------------------------------------------------------------
 
-function _shareErrHtml(msg) {
-    return `<span class="md-body-small" style="color:var(--md-sys-color-error);">${escapeHtml(msg)}</span>`;
-}
-
-async function loadVideoShareLinks() {
-    const container = document.getElementById('video-share-links');
-    if (!container) return;
-
-    // URL is baked into the card's data attribute — if missing, the section
-    // shouldn't be visible anyway (owner-only template guard).
-    if (!_videoShareListUrl) {
-        container.innerHTML = _shareErrHtml('No URL — refresh and try again.');
-        return;
-    }
-
-    container.innerHTML = '<span class="md-body-small text-on-surface-variant">Loading…</span>';
-    try {
-        const resp = await fetch(_videoShareListUrl, {
-            credentials: 'same-origin',
-            headers: { 'Accept': 'application/json' },
-        });
-        if (!resp.ok) {
-            container.innerHTML = _shareErrHtml(`Server returned ${resp.status}. Check server logs.`);
-            console.error('[Share] list failed:', resp.status, _videoShareListUrl);
-            return;
-        }
-        let data;
-        try {
-            data = await resp.json();
-        } catch {
-            container.innerHTML = _shareErrHtml('Unexpected response (not JSON). Check server logs.');
-            return;
-        }
-        renderVideoShareLinks(data.links || []);
-    } catch (e) {
-        container.innerHTML = _shareErrHtml('Network error. Check console.');
-        console.error('[Share] load error', e);
-    }
-}
-
 function renderVideoShareLinks(links) {
     const container = document.getElementById('video-share-links');
     if (!container) return;
     if (!links.length) {
-        container.innerHTML = '<span class="md-body-small text-on-surface-variant">No share links yet.</span>';
+        container.innerHTML = '<span class="md-body-small text-on-surface-variant vsl-empty">No share links yet.</span>';
         return;
     }
     container.innerHTML = links.map(sl => `
-        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+        <div data-token="${escapeHtml(sl.token)}" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
           <span class="md-chip" style="background:var(--md-sys-color-secondary-container); color:var(--md-sys-color-on-secondary-container); font-size:12px; white-space:nowrap;">
             ${escapeHtml(sl.access_type_display)}${sl.has_password ? ' 🔒' : ''}
           </span>
@@ -303,10 +276,36 @@ function renderVideoShareLinks(links) {
                         cursor:pointer;"
                  onclick="this.select(); document.execCommand('copy');" title="Click to copy">
           <button class="md-icon-button" style="color:var(--md-sys-color-error); flex-shrink:0;"
-                  onclick="deleteVideoShareLink('${escapeHtml(sl.delete_url)}')" title="Delete">
+                  onclick="deleteVideoShareLink('${escapeHtml(sl.token)}')" title="Delete">
             <span class="material-symbols-outlined" style="font-size:18px;">delete</span>
           </button>
         </div>`).join('');
+}
+
+function _appendVideoShareLink(sl) {
+    const container = document.getElementById('video-share-links');
+    if (!container) return;
+    // Clear "no links yet" placeholder if present
+    const empty = container.querySelector('.vsl-empty');
+    if (empty) empty.remove();
+    const div = document.createElement('div');
+    div.setAttribute('data-token', sl.token);
+    div.style.cssText = 'display:flex; align-items:center; gap:8px; flex-wrap:wrap;';
+    div.innerHTML = `
+      <span class="md-chip" style="background:var(--md-sys-color-secondary-container); color:var(--md-sys-color-on-secondary-container); font-size:12px; white-space:nowrap;">
+        ${escapeHtml(sl.access_type_display)}${sl.has_password ? ' 🔒' : ''}
+      </span>
+      <input type="text" readonly value="${escapeHtml(sl.url)}"
+             style="flex:1; min-width:0; font-size:11px; font-family:monospace; padding:4px 8px;
+                    border:1px solid var(--md-sys-color-outline-variant); border-radius:4px;
+                    background:var(--md-sys-color-surface-container); color:var(--md-sys-color-on-surface);
+                    cursor:pointer;"
+             onclick="this.select(); document.execCommand('copy');" title="Click to copy">
+      <button class="md-icon-button" style="color:var(--md-sys-color-error); flex-shrink:0;"
+              onclick="deleteVideoShareLink('${escapeHtml(sl.token)}')" title="Delete">
+        <span class="material-symbols-outlined" style="font-size:18px;">delete</span>
+      </button>`;
+    container.appendChild(div);
 }
 
 async function createVideoShareLink() {
@@ -347,7 +346,9 @@ async function createVideoShareLink() {
 
         const pw = document.getElementById('vsl-password');
         if (pw) pw.value = '';
-        loadVideoShareLinks();
+
+        // Append the new link directly — no re-fetch needed
+        _appendVideoShareLink(data);
     } catch (e) {
         alert('Network error creating share link. Check console.');
         console.error('[Share] create error', e);
@@ -356,9 +357,9 @@ async function createVideoShareLink() {
     }
 }
 
-async function deleteVideoShareLink(deleteUrl) {
-    // deleteUrl is the full relative URL returned by the list endpoint.
-    if (!deleteUrl) return;
+async function deleteVideoShareLink(token) {
+    if (!token || !_shareLinkDeleteBase) return;
+    const deleteUrl = _shareLinkDeleteBase.replace(_PLACEHOLDER, token);
     try {
         const resp = await fetch(deleteUrl, {
             method: 'POST',
@@ -369,7 +370,15 @@ async function deleteVideoShareLink(deleteUrl) {
             },
         });
         if (resp.ok) {
-            loadVideoShareLinks();
+            // Remove the row directly from the DOM
+            const container = document.getElementById('video-share-links');
+            if (container) {
+                const row = container.querySelector(`[data-token="${token}"]`);
+                if (row) row.remove();
+                if (!container.querySelector('[data-token]')) {
+                    container.innerHTML = '<span class="md-body-small text-on-surface-variant vsl-empty">No share links yet.</span>';
+                }
+            }
         } else {
             alert(`Failed to delete link (${resp.status}).`);
         }

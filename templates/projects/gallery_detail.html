@@ -142,7 +142,6 @@
              data-project-pk="{{ project.pk }}"
              data-gallery-pk="{{ gallery.pk }}"
              {% if is_owner %}
-             data-share-list-url="{% url 'projects:video_share_link_list' project.pk gallery.pk video.pk %}"
              data-share-create-url="{% url 'projects:video_share_link_create' project.pk gallery.pk video.pk %}"
              {% endif %}
              onclick="openSidebar(this)">
@@ -181,6 +180,7 @@
             </button>
             {% endif %}
           </div>
+          {% if is_owner %}<script type="application/json" class="vsl-data">[{% for sl in video.share_links.all %}{% if not forloop.first %},{% endif %}{"token":"{{ sl.token }}","access_type_display":"{{ sl.get_access_type_display|escapejs }}","has_password":{% if sl.has_password %}true{% else %}false{% endif %},"url":"{{ request.scheme }}://{{ request.get_host }}{% url 'projects:share_gate' sl.token %}","delete_url":"{% url 'projects:share_link_delete' project.pk sl.token %}"}{% endfor %}]</script>{% endif %}
         </div>
       {% endfor %}
     </div>
@@ -271,9 +271,7 @@
     {% if is_owner %}
     <div style="border-top:1px solid var(--md-sys-color-outline-variant); padding-top:16px; margin-top:8px;">
       <h3 class="md-title-medium" style="margin:0 0 10px;">Share this Video</h3>
-      <div id="video-share-links" style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;">
-        <span class="md-body-small text-on-surface-variant">Loading…</span>
-      </div>
+      <div id="video-share-links" style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;"></div>
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
         <label style="display:flex; align-items:center; gap:5px; cursor:pointer; padding:6px 10px; border-radius:var(--md-sys-shape-corner-small); border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container); font-size:13px;">
           <input type="radio" name="vsl_access" value="view" checked style="accent-color:var(--md-sys-color-primary);">

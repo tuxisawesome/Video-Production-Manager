@@ -53,6 +53,8 @@ let ws = null;
 let mediaStream = null;
 let mediaRecorder = null;
 let isRecording = false;
+let currentMimeType = '';   // Actual mimeType used by MediaRecorder
+let audioCtx = null;        // Web Audio context for normalization
 
 // Chunk upload state
 let chunkQueue = [];
@@ -233,6 +235,25 @@ async function initCamera() {
 
     try {
         mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+        // Verify we actually got a video track. iOS Safari can return audio-only
+        // streams in some failure modes.
+        const videoTracks = mediaStream.getVideoTracks();
+        const audioTracks = mediaStream.getAudioTracks();
+        log('Camera', `tracks: video=${videoTracks.length}, audio=${audioTracks.length}`);
+
+        if (videoTracks.length === 0) {
+            setStatusText('No video track — check camera permission');
+            setConnectionUI('disconnected', 'No video');
+            wsSend({ type: 'status_update', status: 'error', data: { message: 'Camera granted but no video track returned' } });
+            return false;
+        }
+
+        // Apply audio dynamics compression for consistent volume during music playback.
+        if (config.settings.audio_enabled && audioTracks.length > 0) {
+            mediaStream = applyAudioNormalization(mediaStream);
+        }
+
         dom.viewfinder.srcObject = mediaStream;
         log('Camera', 'Stream acquired');
         setStatusText('Waiting');
@@ -259,35 +280,100 @@ async function initCamera() {
 }
 
 // ---------------------------------------------------------------------------
+// Audio normalization (Web Audio API DynamicsCompressor)
+// ---------------------------------------------------------------------------
+// Routes audio through a dynamics compressor so loud music gets quieter and
+// quiet sounds get louder. Keeps the perceived volume roughly constant.
+function applyAudioNormalization(rawStream) {
+    const AudioCtxCls = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtxCls) {
+        log('Audio', 'Web Audio API unavailable — recording raw audio');
+        return rawStream;
+    }
+    try {
+        audioCtx = new AudioCtxCls();
+        const source = audioCtx.createMediaStreamSource(rawStream);
+
+        // Compressor settings tuned for music playback recording:
+        //   threshold -24 dB    : start compressing well below clipping
+        //   knee 30 dB          : wide soft knee → natural sound
+        //   ratio 12:1          : aggressive ratio to flatten peaks
+        //   attack 3 ms         : fast attack catches transients
+        //   release 250 ms      : musical release time
+        const compressor = audioCtx.createDynamicsCompressor();
+        compressor.threshold.value = -24;
+        compressor.knee.value = 30;
+        compressor.ratio.value = 12;
+        compressor.attack.value = 0.003;
+        compressor.release.value = 0.25;
+
+        // Add a small make-up gain so the compressed signal isn't too quiet.
+        const makeup = audioCtx.createGain();
+        makeup.gain.value = 1.6;
+
+        const dest = audioCtx.createMediaStreamDestination();
+        source.connect(compressor);
+        compressor.connect(makeup);
+        makeup.connect(dest);
+
+        const processedStream = new MediaStream([
+            ...rawStream.getVideoTracks(),
+            ...dest.stream.getAudioTracks(),
+        ]);
+        log('Audio', 'Dynamics compressor active');
+        return processedStream;
+    } catch (err) {
+        log('Audio', 'Normalization failed, using raw stream:', err.message);
+        return rawStream;
+    }
+}
+
+// ---------------------------------------------------------------------------
 // MediaRecorder MIME type selection
 // ---------------------------------------------------------------------------
+
+// Detect Safari/iOS where MP4/H.264 is the only reliable container for video recording.
+// WebM via MediaRecorder on iOS Safari is unreliable and frequently produces
+// audio-only files even when isTypeSupported() returns true.
+function isSafariOrIOS() {
+    const ua = navigator.userAgent;
+    if (/iPad|iPhone|iPod/.test(ua)) return true;
+    return /Safari/.test(ua) && !/Chrome|Chromium|CriOS|FxiOS|EdgiOS/.test(ua);
+}
 
 function selectMimeType() {
     const vc = config.settings.video_codec || 'vp8';
     const ac = config.settings.audio_codec || 'opus';
     const hasAudio = config.settings.audio_enabled === true;
 
-    // Build a prioritized list of MIME types to try.
+    // Prioritized list of MIME types — order matters per-platform.
     const candidates = [];
+
+    if (isSafariOrIOS()) {
+        // Safari/iOS: MP4/H.264 first. iOS sometimes lies about WebM support and
+        // produces audio-only files for unsupported video codecs.
+        candidates.push('video/mp4;codecs="avc1.42E01E,mp4a.40.2"'); // H.264 baseline + AAC
+        candidates.push('video/mp4;codecs=h264,aac');
+        candidates.push('video/mp4;codecs=avc1');
+        candidates.push('video/mp4;codecs=h264');
+        candidates.push('video/mp4');
+    }
 
     if (hasAudio) {
         candidates.push(`video/webm;codecs=${vc},${ac}`);
-        candidates.push(`video/webm;codecs=${vc}`);
-    } else {
-        candidates.push(`video/webm;codecs=${vc}`);
     }
-
-    // Generic fallbacks
+    candidates.push(`video/webm;codecs=${vc}`);
     candidates.push('video/webm;codecs=vp9,opus');
     candidates.push('video/webm;codecs=vp8,opus');
     candidates.push('video/webm;codecs=vp9');
     candidates.push('video/webm;codecs=vp8');
     candidates.push('video/webm');
 
-    // MP4 fallbacks (Safari iOS)
-    candidates.push('video/mp4;codecs=h264,aac');
-    candidates.push('video/mp4;codecs=h264');
-    candidates.push('video/mp4');
+    // MP4 fallback for non-Safari browsers
+    if (!isSafariOrIOS()) {
+        candidates.push('video/mp4;codecs=h264,aac');
+        candidates.push('video/mp4');
+    }
 
     for (const mime of candidates) {
         if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(mime)) {
@@ -326,7 +412,10 @@ function createMediaRecorder() {
         recorder.onstop = onRecorderStop;
         recorder.onerror = onRecorderError;
 
-        log('Recorder', `Created with mimeType=${recorder.mimeType}, videoBps=${videoBps}`);
+        // Remember the actual mimeType the browser settled on so the server can
+        // save the file with the correct extension (mp4 vs webm).
+        currentMimeType = recorder.mimeType || mimeType || '';
+        log('Recorder', `Created with mimeType=${currentMimeType}, videoBps=${videoBps}`);
         return recorder;
     } catch (err) {
         logError('Recorder', 'Failed to create MediaRecorder:', err);
@@ -436,6 +525,7 @@ async function finalizeRecording() {
         const response = await fetch(config.finalizeUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mime_type: currentMimeType }),
         });
 
         if (!response.ok) {

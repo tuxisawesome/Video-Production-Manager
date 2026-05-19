@@ -99,7 +99,13 @@ def phone_recorder(request, token):
 @csrf_exempt
 @require_POST
 def phone_chunk_upload(request, token):
-    """Receive a video chunk from the phone and append it to a temp file."""
+    """
+    Receive a video chunk and write it to a per-chunk file.
+
+    Idempotent: re-uploading the same chunk_index overwrites the existing
+    chunk with identical data, so client retries never produce duplicate
+    bytes in the final assembled file (a common cause of corruption).
+    """
     session = _get_valid_session(token)
     if session is None:
         return JsonResponse({'error': 'Invalid or expired session.'}, status=403)
@@ -114,11 +120,19 @@ def phone_chunk_upload(request, token):
     if not chunk_data:
         return JsonResponse({'error': 'Empty chunk.'}, status=400)
 
-    temp_dir = os.path.join(settings.MEDIA_ROOT, 'temp')
-    os.makedirs(temp_dir, exist_ok=True)
+    # Parse chunk_index; default to a monotonic value if missing.
+    try:
+        chunk_index = int(request.POST.get('chunk_index', '0'))
+    except (TypeError, ValueError):
+        chunk_index = 0
+    if chunk_index < 0 or chunk_index > 1_000_000:
+        return JsonResponse({'error': 'Invalid chunk_index.'}, status=400)
 
-    temp_path = os.path.join(temp_dir, f'{session.id}.webm')
-    with open(temp_path, 'ab') as f:
+    # Write each chunk to its own file inside a per-session dir.
+    session_dir = os.path.join(settings.MEDIA_ROOT, 'temp', str(session.id))
+    os.makedirs(session_dir, exist_ok=True)
+    chunk_path = os.path.join(session_dir, f'chunk_{chunk_index:06d}.bin')
+    with open(chunk_path, 'wb') as f:  # write, not append → idempotent
         f.write(chunk_data)
 
     # Extend session expiry on each successful chunk upload.
@@ -128,34 +142,78 @@ def phone_chunk_upload(request, token):
     return JsonResponse({'success': True})
 
 
+def _extension_from_mime(mime_type):
+    """Map a MediaRecorder mimeType string to a file extension."""
+    m = (mime_type or '').lower()
+    if 'mp4' in m:
+        return 'mp4'
+    if 'ogg' in m:
+        return 'ogg'
+    return 'webm'
+
+
 @csrf_exempt
 @require_POST
 def phone_finalize(request, token):
-    """Move the temp recording to its final location and create a Video."""
+    """
+    Concatenate all uploaded chunks in order, save with the correct
+    extension based on the recorder's MIME type, and create a Video row.
+    """
     session = _get_valid_session(token)
     if session is None:
         return JsonResponse({'error': 'Invalid or expired session.'}, status=403)
 
-    temp_path = os.path.join(settings.MEDIA_ROOT, 'temp', f'{session.id}.webm')
-    if not os.path.exists(temp_path):
+    # Read mime_type from request body so we can pick the right extension.
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        body = {}
+    ext = _extension_from_mime(body.get('mime_type', ''))
+
+    session_dir = os.path.join(settings.MEDIA_ROOT, 'temp', str(session.id))
+    legacy_path = os.path.join(settings.MEDIA_ROOT, 'temp', f'{session.id}.webm')
+
+    # Gather chunks in index order.
+    chunk_files = []
+    if os.path.isdir(session_dir):
+        chunk_files = sorted(
+            os.path.join(session_dir, name)
+            for name in os.listdir(session_dir)
+            if name.startswith('chunk_') and name.endswith('.bin')
+        )
+
+    if not chunk_files and not os.path.exists(legacy_path):
         return JsonResponse({'error': 'No recording data found.'}, status=404)
 
     video_id = uuid.uuid4()
     project_id = session.gallery.project_id
     final_dir = os.path.join(settings.MEDIA_ROOT, 'videos', str(project_id))
     os.makedirs(final_dir, exist_ok=True)
-    final_path = os.path.join(final_dir, f'{video_id}.webm')
+    final_path = os.path.join(final_dir, f'{video_id}.{ext}')
 
-    shutil.move(temp_path, final_path)
+    if chunk_files:
+        # Concatenate chunks in order.
+        with open(final_path, 'wb') as out:
+            for chunk_path in chunk_files:
+                with open(chunk_path, 'rb') as src:
+                    shutil.copyfileobj(src, out, length=1024 * 1024)
+        # Clean up chunk dir.
+        try:
+            shutil.rmtree(session_dir)
+        except OSError:
+            pass
+    else:
+        # Fallback: legacy single-file temp from before this fix.
+        shutil.move(legacy_path, final_path)
 
-    relative_path = f'videos/{project_id}/{video_id}.webm'
+    relative_path = f'videos/{project_id}/{video_id}.{ext}'
     file_size = os.path.getsize(final_path)
 
     video = Video.objects.create(
         id=video_id,
         gallery=session.gallery,
         file=relative_path,
-        filename_original=f'{video_id}.webm',
+        filename_original=f'{video_id}.{ext}',
         file_size_bytes=file_size,
     )
 
@@ -165,14 +223,23 @@ def phone_finalize(request, token):
 @csrf_exempt
 @require_POST
 def phone_discard(request, token):
-    """Delete the temp recording file if it exists."""
+    """Delete any temp data for this session (chunk dir and legacy single file)."""
     session = _get_valid_session(token)
     if session is None:
         return JsonResponse({'error': 'Invalid or expired session.'}, status=403)
 
-    temp_path = os.path.join(settings.MEDIA_ROOT, 'temp', f'{session.id}.webm')
-    if os.path.exists(temp_path):
-        os.remove(temp_path)
+    session_dir = os.path.join(settings.MEDIA_ROOT, 'temp', str(session.id))
+    legacy_path = os.path.join(settings.MEDIA_ROOT, 'temp', f'{session.id}.webm')
+    if os.path.isdir(session_dir):
+        try:
+            shutil.rmtree(session_dir)
+        except OSError:
+            pass
+    if os.path.exists(legacy_path):
+        try:
+            os.remove(legacy_path)
+        except OSError:
+            pass
 
     return JsonResponse({'success': True})
 

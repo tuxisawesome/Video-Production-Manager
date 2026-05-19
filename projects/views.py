@@ -324,21 +324,19 @@ def video_download(request, pk, gallery_pk, video_id):
     if not video.file:
         raise Http404("Video file not found.")
 
-    filename = video.filename_original or f"{video.id}.webm"
+    filename = video.filename_original or video.file.name.split("/")[-1]
+    content_type = _video_content_type(video.file.name)
 
     if settings.DEBUG:
         file_path = video.file.path
         if not os.path.isfile(file_path):
             raise Http404("Video file not found on disk.")
-        response = FileResponse(
-            open(file_path, "rb"),
-            content_type="video/webm",
-        )
+        response = FileResponse(open(file_path, "rb"), content_type=content_type)
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response
     else:
         response = HttpResponse()
-        response["Content-Type"] = "video/webm"
+        response["Content-Type"] = content_type
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         response["X-Accel-Redirect"] = f"/protected-media/{video.file.name}"
         return response
@@ -981,16 +979,27 @@ def public_rank_video_file(request, token, video_id):
     return _serve_video_file(video)
 
 
+def _video_content_type(file_name):
+    """Return the correct MIME type based on the video file's extension."""
+    name = (file_name or "").lower()
+    if name.endswith(".mp4"):
+        return "video/mp4"
+    if name.endswith(".ogg") or name.endswith(".ogv"):
+        return "video/ogg"
+    return "video/webm"
+
+
 def _serve_video_file(video):
     """Shared helper: serve a Video's file via FileResponse (debug) or X-Accel-Redirect (prod)."""
     if not video.file:
         raise Http404
+    content_type = _video_content_type(video.file.name)
     if settings.DEBUG:
         file_path = video.file.path
         if not os.path.isfile(file_path):
             raise Http404
-        return FileResponse(open(file_path, "rb"), content_type="video/webm")
+        return FileResponse(open(file_path, "rb"), content_type=content_type)
     response = HttpResponse()
-    response["Content-Type"] = "video/webm"
+    response["Content-Type"] = content_type
     response["X-Accel-Redirect"] = f"/protected-media/{video.file.name}"
     return response

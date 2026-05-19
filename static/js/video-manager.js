@@ -328,6 +328,8 @@ async function createVideoShareLink() {
     // Immediate visible proof the function was called
     const vslContainer = document.getElementById('video-share-links');
     if (vslContainer) vslContainer.innerHTML = '<span style="color:blue;font-weight:bold;">⏳ Generating…</span>';
+    const _probeBtn = document.getElementById('vsl-generate-btn');
+    if (_probeBtn) _probeBtn.style.background = 'orange';
 
     console.log('[Share] createVideoShareLink called, url=', _videoShareCreateUrl);
 
@@ -468,6 +470,26 @@ if (uploadInput && uploadForm) {
         if (uploadInput.files.length > 0) uploadForm.submit();
     });
 }
+
+// ---------------------------------------------------------------------------
+// Generate button — document-level capture listener (most reliable)
+// Fires before any element-level handler, catches clicks on the button
+// or any child element (icon span, text) inside it.
+// ---------------------------------------------------------------------------
+
+document.addEventListener('click', function (e) {
+    if (e.target.closest && e.target.closest('#vsl-generate-btn')) {
+        e.preventDefault();
+        e.stopPropagation();
+        createVideoShareLink();
+    }
+}, true /* useCapture — runs before bubbling handlers */);
+
+// Also wire directly at load time in case closest() is unavailable.
+(function () {
+    const btn = document.getElementById('vsl-generate-btn');
+    if (btn) btn.addEventListener('click', createVideoShareLink);
+}());
 
 // ---------------------------------------------------------------------------
 // Keyboard: Escape closes sidebar / dialogs

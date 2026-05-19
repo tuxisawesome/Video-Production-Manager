@@ -101,6 +101,8 @@ urlpatterns = [
     ),
     path("share/<uuid:token>/video/", views.public_video_view, name="public_video"),
     path("share/<uuid:token>/video-stream/", views.public_video_stream, name="public_video_stream"),
+    path("share/<uuid:token>/comments/",        views.public_comment_list_view,   name="public_comment_list"),
+    path("share/<uuid:token>/comments/create/", views.public_comment_create_view, name="public_comment_create"),
     path("share/<uuid:token>/rank/", views.public_rank_view, name="public_rank"),
     path("share/<uuid:token>/rank/next-pair/", views.public_next_pair_view, name="public_next_pair"),
     path("share/<uuid:token>/rank/submit/", views.public_submit_comparison_view, name="public_submit"),

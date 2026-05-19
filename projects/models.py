@@ -179,29 +179,44 @@ class GalleryShare(models.Model):
 
 
 class VideoComment(models.Model):
-    """A timestamped comment left on a video."""
+    """A timestamped comment left on a video by an authenticated user or a guest."""
 
     video = models.ForeignKey(
         Video,
         on_delete=models.CASCADE,
         related_name="comments",
     )
+    # Authenticated author. Null when the comment came from a public share-link
+    # commentator who isn't logged in (guest_name carries their label instead).
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
         related_name="video_comments",
     )
+    guest_name = models.CharField(max_length=80, blank=True)
     text = models.TextField()
     # Null means the comment is not attached to a specific moment.
     timestamp_seconds = models.FloatField(null=True, blank=True)
+    # Token of the ShareLink used to post (when posted by a guest). Lets the
+    # owner identify which link a problematic comment came in through.
+    share_link_token = models.CharField(max_length=64, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["timestamp_seconds", "created_at"]
 
+    @property
+    def display_author(self):
+        if self.author_id:
+            return self.author.username
+        if self.guest_name:
+            return f"{self.guest_name} (guest)"
+        return "Anonymous"
+
     def __str__(self):
         ts = f"@{self.timestamp_seconds:.1f}s" if self.timestamp_seconds is not None else ""
-        return f"{self.author.username}{ts}: {self.text[:40]}"
+        return f"{self.display_author}{ts}: {self.text[:40]}"
 
 
 class ShareLink(models.Model):

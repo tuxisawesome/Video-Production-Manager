@@ -208,6 +208,15 @@ def gallery_detail(request, pk, gallery_pk):
     gallery_shares = gallery.shares.select_related("shared_with").all() if is_owner else []
     share_links = gallery.share_links.all() if is_owner else []
 
+    # Flat list of every video share link in this gallery — used by the
+    # owner-only "All video share links" table so they can manage links
+    # without opening each video sidebar in turn.
+    video_share_rows = []
+    if is_owner:
+        for v in videos:
+            for sl in v.share_links.all():
+                video_share_rows.append({"video": v, "link": sl})
+
     return render(request, "projects/gallery_detail.html", {
         "gallery": gallery,
         "project": project,
@@ -219,6 +228,7 @@ def gallery_detail(request, pk, gallery_pk):
         "shares": shares,
         "gallery_shares": gallery_shares,
         "share_links": share_links,
+        "video_share_rows": video_share_rows,
     })
 
 
@@ -507,11 +517,12 @@ def comment_list_view(request, pk, gallery_pk, video_id):
     comments = [
         {
             "id": c.id,
-            "author": c.author.username,
+            "author": c.display_author,
+            "is_guest": not c.author_id,
             "text": c.text,
             "timestamp_seconds": c.timestamp_seconds,
             "created_at": c.created_at.isoformat(),
-            "is_own": c.author == request.user,
+            "is_own": c.author_id is not None and c.author_id == request.user.id,
         }
         for c in video.comments.select_related("author").all()
     ]
@@ -870,6 +881,127 @@ def public_video_view(request, token):
         "video": video,
         "token": token,
     })
+
+
+# ---------------------------------------------------------------------------
+# Public (share-link) comment endpoints
+# ---------------------------------------------------------------------------
+
+
+def _public_video_for_comments(request, token):
+    """
+    Resolve the Video targeted by a public share token, or return an error.
+    Works for video-level share links (link.video) and gallery-level links
+    (where the video id arrives in the request body / query).
+    """
+    link, err = _require_link_access(request, token)
+    if err is not None:
+        return None, None, err
+
+    if link.video_id:
+        return link, link.video, None
+
+    # Gallery- or project-level link — must specify which video.
+    if request.method == "POST":
+        try:
+            body = json.loads(request.body) if request.body else {}
+        except json.JSONDecodeError:
+            return None, None, JsonResponse({"error": "Invalid JSON."}, status=400)
+        vid = body.get("video_id")
+    else:
+        vid = request.GET.get("video_id")
+
+    if not vid:
+        return None, None, JsonResponse({"error": "video_id required."}, status=400)
+
+    if link.gallery_id:
+        try:
+            video = Video.objects.get(pk=vid, gallery_id=link.gallery_id)
+        except (Video.DoesNotExist, ValueError):
+            return None, None, JsonResponse({"error": "Video not found."}, status=404)
+    elif link.project_id:
+        try:
+            video = Video.objects.get(pk=vid, gallery__project_id=link.project_id)
+        except (Video.DoesNotExist, ValueError):
+            return None, None, JsonResponse({"error": "Video not found."}, status=404)
+    else:
+        return None, None, JsonResponse({"error": "Bad link."}, status=400)
+
+    return link, video, None
+
+
+@require_GET
+def public_comment_list_view(request, token):
+    """List comments on a video reached via a public share link."""
+    link, video, err = _public_video_for_comments(request, token)
+    if err is not None:
+        return err
+
+    comments = [
+        {
+            "id": c.id,
+            "author": c.display_author,
+            "is_guest": not c.author_id,
+            "text": c.text,
+            "timestamp_seconds": c.timestamp_seconds,
+            "created_at": c.created_at.isoformat(),
+            "is_own": False,  # guests can't delete their own comments
+        }
+        for c in video.comments.select_related("author").all()
+    ]
+    return JsonResponse({"comments": comments})
+
+
+@csrf_exempt  # share-link auth is via the URL token, not session/CSRF.
+@require_POST
+def public_comment_create_view(request, token):
+    """Create a comment on a video via a public commentator share link."""
+    link, video, err = _public_video_for_comments(request, token)
+    if err is not None:
+        return err
+
+    if not link.can_comment:
+        return JsonResponse(
+            {"error": "This share link does not allow commenting."}, status=403,
+        )
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    text = (data.get("text") or "").strip()
+    if not text:
+        return JsonResponse({"error": "Comment text is required."}, status=400)
+    if len(text) > 4000:
+        return JsonResponse({"error": "Comment is too long."}, status=400)
+
+    guest_name = (data.get("guest_name") or "").strip()[:80]
+
+    ts = data.get("timestamp_seconds")
+    if ts is not None:
+        try:
+            ts = float(ts)
+        except (TypeError, ValueError):
+            ts = None
+
+    comment = VideoComment.objects.create(
+        video=video,
+        author=None,           # guest
+        guest_name=guest_name,
+        share_link_token=str(link.token),
+        text=text,
+        timestamp_seconds=ts,
+    )
+    return JsonResponse({
+        "id": comment.id,
+        "author": comment.display_author,
+        "is_guest": True,
+        "text": comment.text,
+        "timestamp_seconds": comment.timestamp_seconds,
+        "created_at": comment.created_at.isoformat(),
+        "is_own": False,
+    }, status=201)
 
 
 def public_video_stream(request, token):

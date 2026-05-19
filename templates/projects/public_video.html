@@ -10,10 +10,13 @@
 
 <div class="content-area" style="max-width:900px;">
   <div class="md-card-elevated" style="overflow:hidden;">
-    <video controls style="width:100%; aspect-ratio:16/9; background:#000; display:block;"
+    <video id="public-video-player" controls
+           style="width:100%; aspect-ratio:16/9; background:#000; display:block;"
            src="{% url 'projects:public_video_stream' link.token %}"></video>
     <div style="padding:16px 20px; display:flex; align-items:center; gap:16px;">
-      <span class="md-body-small text-on-surface-variant" style="flex:1;">Shared video · Elo {{ video.elo_rating|floatformat:0 }}</span>
+      <span class="md-body-small text-on-surface-variant" style="flex:1;">
+        Shared video · Elo {{ video.elo_rating|floatformat:0 }}
+      </span>
       {% if link.can_download %}
       <a href="{% url 'projects:public_video_stream' link.token %}?download=1" class="md-button-outlined">
         <span class="material-symbols-outlined">download</span>
@@ -26,18 +29,168 @@
   {% if link.can_comment %}
   <div class="md-card-elevated" style="margin-top:20px; padding:20px;">
     <h2 class="md-title-medium" style="margin:0 0 16px;">Comments</h2>
-    <div id="comments-list" style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;"></div>
-    <div>
-      <textarea id="comment-text" placeholder="Leave a comment…"
-                style="width:100%; min-height:72px; padding:10px 12px; border-radius:var(--md-sys-shape-corner-small);
-                       border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container);
-                       color:var(--md-sys-color-on-surface); font-size:14px; resize:vertical; box-sizing:border-box;"></textarea>
-      <button type="button" class="md-button-tonal" style="margin-top:8px;" onclick="submitComment();">
+    <div id="comments-list" style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;">
+      <span class="md-body-small text-on-surface-variant">Loading comments…</span>
+    </div>
+
+    <div style="display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
+      <input type="text" id="guest-name" maxlength="80"
+             placeholder="Your name (optional)"
+             style="flex:1; min-width:160px; padding:8px 12px; border-radius:var(--md-sys-shape-corner-small);
+                    border:1px solid var(--md-sys-color-outline);
+                    background:var(--md-sys-color-surface-container);
+                    color:var(--md-sys-color-on-surface); font-size:14px;">
+    </div>
+
+    <textarea id="comment-text" placeholder="Leave a comment…"
+              style="width:100%; min-height:72px; padding:10px 12px; border-radius:var(--md-sys-shape-corner-small);
+                     border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container);
+                     color:var(--md-sys-color-on-surface); font-size:14px; resize:vertical; box-sizing:border-box;"></textarea>
+
+    <div style="display:flex; align-items:center; gap:8px; margin-top:8px; flex-wrap:wrap;">
+      <input type="number" id="comment-timestamp" placeholder="Timestamp (s) optional"
+             min="0" step="0.1"
+             style="width:180px; padding:6px 10px; border-radius:var(--md-sys-shape-corner-small);
+                    border:1px solid var(--md-sys-color-outline);
+                    background:var(--md-sys-color-surface-container); font-size:13px;">
+      <button type="button" class="md-button-text" style="font-size:13px;" onclick="pcUseCurrentTime();">
+        Use current time
+      </button>
+      <button type="button" id="post-comment-btn" class="md-button-tonal" onclick="pcSubmitComment();">
         <span class="material-symbols-outlined">send</span>
         Post
       </button>
     </div>
+    <p id="comment-error" class="md-body-small" style="color:var(--md-sys-color-error); margin:8px 0 0; display:none;"></p>
   </div>
   {% endif %}
 </div>
+
+{% if link.can_comment %}
+<script id="public-comment-data" type="application/json">
+{
+  "list_url":   "{% url 'projects:public_comment_list' link.token %}",
+  "create_url": "{% url 'projects:public_comment_create' link.token %}"
+}
+</script>
+<script>
+(function () {
+  'use strict';
+  const data = JSON.parse(document.getElementById('public-comment-data').textContent);
+  const listUrl   = data.list_url;
+  const createUrl = data.create_url;
+
+  const listEl  = document.getElementById('comments-list');
+  const textEl  = document.getElementById('comment-text');
+  const tsEl    = document.getElementById('comment-timestamp');
+  const nameEl  = document.getElementById('guest-name');
+  const errEl   = document.getElementById('comment-error');
+  const btnEl   = document.getElementById('post-comment-btn');
+  const player  = document.getElementById('public-video-player');
+
+  // Cache the guest name so it persists between refreshes on the same device.
+  try {
+    const stored = localStorage.getItem('vpm.guest_name');
+    if (stored) nameEl.value = stored;
+  } catch (_) {}
+
+  function escapeHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function formatTs(secs) {
+    if (secs == null) return '';
+    const m = Math.floor(secs / 60);
+    const s = (secs % 60).toFixed(1).padStart(4, '0');
+    return m > 0 ? `${m}:${s}` : `${s}s`;
+  }
+
+  function renderComments(list) {
+    if (!list.length) {
+      listEl.innerHTML = '<span class="md-body-small text-on-surface-variant">No comments yet — be the first.</span>';
+      return;
+    }
+    listEl.innerHTML = list.map((c) => {
+      const tsBtn = c.timestamp_seconds != null
+        ? `<button class="md-button-text" style="font-size:12px; padding:0 4px; min-width:0;"
+                   onclick="document.getElementById('public-video-player').currentTime=${c.timestamp_seconds}">
+             @${formatTs(c.timestamp_seconds)}
+           </button>`
+        : '';
+      return `
+        <div style="background:var(--md-sys-color-surface-container); border-radius:var(--md-sys-shape-corner-small);
+                    padding:10px 12px; display:flex; flex-direction:column; gap:4px;">
+          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+            <span class="md-label-medium">${escapeHtml(c.author)}</span>
+            ${tsBtn}
+            <span class="md-body-small text-on-surface-variant" style="margin-left:auto;">
+              ${new Date(c.created_at).toLocaleString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })}
+            </span>
+          </div>
+          <p class="md-body-medium" style="margin:0; white-space:pre-wrap;">${escapeHtml(c.text)}</p>
+        </div>`;
+    }).join('');
+  }
+
+  async function loadComments() {
+    try {
+      const resp = await fetch(listUrl, { headers: { 'Accept': 'application/json' } });
+      if (!resp.ok) {
+        listEl.innerHTML = '<span class="md-body-small" style="color:var(--md-sys-color-error);">Could not load comments.</span>';
+        return;
+      }
+      const { comments } = await resp.json();
+      renderComments(comments || []);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  window.pcUseCurrentTime = function () {
+    if (player) tsEl.value = player.currentTime.toFixed(1);
+  };
+
+  window.pcSubmitComment = async function () {
+    const text = (textEl.value || '').trim();
+    if (!text) {
+      errEl.textContent = 'Please enter a comment.';
+      errEl.style.display = 'block';
+      return;
+    }
+    const guestName = (nameEl.value || '').trim();
+    const ts = tsEl.value !== '' ? parseFloat(tsEl.value) : null;
+
+    try { localStorage.setItem('vpm.guest_name', guestName); } catch (_) {}
+
+    btnEl.disabled = true;
+    errEl.style.display = 'none';
+
+    try {
+      const resp = await fetch(createUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, guest_name: guestName, timestamp_seconds: ts }),
+      });
+      if (!resp.ok) {
+        let msg = `Server error ${resp.status}.`;
+        try { const j = await resp.json(); msg = j.error || msg; } catch (_) {}
+        errEl.textContent = msg;
+        errEl.style.display = 'block';
+        return;
+      }
+      textEl.value = '';
+      tsEl.value = '';
+      await loadComments();
+    } catch (e) {
+      errEl.textContent = 'Network error — try again.';
+      errEl.style.display = 'block';
+    } finally {
+      btnEl.disabled = false;
+    }
+  };
+
+  loadComments();
+})();
+</script>
+{% endif %}
 {% endblock %}

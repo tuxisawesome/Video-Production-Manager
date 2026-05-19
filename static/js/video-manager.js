@@ -349,6 +349,27 @@ function _appendVideoShareLink(sl) {
     div.style.cssText = 'display:flex; align-items:center; gap:8px; flex-wrap:nowrap;';
     div.innerHTML = _shareRowHtml(sl);
     container.appendChild(div);
+    // Persist the new link into the card's embedded JSON so it survives
+    // closing/reopening the sidebar.
+    _updateCardShareLinks(arr => [...arr, {
+        token: sl.token,
+        access_type_display: sl.access_type_display,
+        has_password: !!sl.has_password,
+        url: sl.url,
+        delete_url: sl.delete_url || '',
+    }]);
+}
+
+// Keep the embedded JSON inside the current card in sync with whatever we
+// just rendered. Otherwise reopening the sidebar re-parses stale data and
+// resurrects deleted links / loses freshly-created ones.
+function _updateCardShareLinks(transform) {
+    if (!_currentCard) return;
+    const slEl = _currentCard.querySelector('.vsl-data');
+    if (!slEl) return;
+    let arr = [];
+    try { arr = JSON.parse(slEl.textContent || '[]'); } catch (_) {}
+    slEl.textContent = JSON.stringify(transform(arr));
 }
 
 function _vslShowError(msg) {
@@ -435,6 +456,17 @@ async function deleteVideoShareLink(token) {
                 if (!container.querySelector('[data-token]')) {
                     container.innerHTML = '<span class="md-body-small text-on-surface-variant vsl-empty">No share links yet.</span>';
                 }
+            }
+            // Drop the entry from the card's embedded JSON so the next sidebar
+            // open doesn't resurrect the deleted link.
+            _updateCardShareLinks(arr => arr.filter(x => x.token !== token));
+            // Also drop any gallery-level row showing the same link.
+            const galleryRow = document.querySelector(`#gallery-share-table [data-token="${token}"]`);
+            if (galleryRow) galleryRow.remove();
+            const tbody = document.getElementById('gallery-share-tbody');
+            if (tbody && !tbody.children.length) {
+                const empty = document.getElementById('gallery-share-empty');
+                if (empty) empty.style.display = '';
             }
         } else {
             alert(`Failed to delete link (${resp.status}).`);

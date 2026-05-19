@@ -127,6 +127,64 @@
   </div>
   {% endif %}
 
+  <!-- All video-level share links (owner only) -->
+  {% if is_owner %}
+  <div class="md-card-elevated" style="padding:16px 20px; margin-bottom:20px;">
+    <details {% if video_share_rows %}open{% endif %}>
+      <summary style="cursor:pointer; display:flex; align-items:center; gap:8px; user-select:none;">
+        <span class="material-symbols-outlined" style="font-size:20px;">videocam</span>
+        <span class="md-title-medium">Video Share Links</span>
+        <span class="md-body-small text-on-surface-variant" style="margin-left:auto;">
+          {{ video_share_rows|length }} link{{ video_share_rows|length|pluralize }}
+        </span>
+      </summary>
+      <div style="margin-top:12px;">
+        <span id="gallery-share-empty" class="md-body-small text-on-surface-variant"
+              style="{% if video_share_rows %}display:none;{% endif %}">
+          No per-video share links yet. Open any video in the sidebar to create one.
+        </span>
+        <div id="gallery-share-table" style="{% if not video_share_rows %}display:none;{% endif %}">
+          <div id="gallery-share-tbody" style="display:flex; flex-direction:column; gap:8px;">
+            {% for row in video_share_rows %}
+            <div data-token="{{ row.link.token }}"
+                 style="display:flex; align-items:center; gap:8px; flex-wrap:nowrap;
+                        padding:8px 4px; border-bottom:1px solid var(--md-sys-color-outline-variant);">
+              <span class="md-body-small" style="flex:0 0 28%; min-width:0; overflow:hidden;
+                                                  text-overflow:ellipsis; white-space:nowrap;"
+                    title="{{ row.video.filename_original|default:row.video.pk }}">
+                {{ row.video.filename_original|default:row.video.pk }}
+              </span>
+              <span class="md-chip" style="background:var(--md-sys-color-secondary-container);
+                                           color:var(--md-sys-color-on-secondary-container);
+                                           font-size:12px; padding:2px 8px; border-radius:8px;
+                                           white-space:nowrap; flex-shrink:0;">
+                {% if row.link.access_type == 'commentator' %}Commentator
+                {% elif row.link.access_type == 'rank' %}Rank
+                {% else %}View{% endif %}
+                {% if row.link.has_password %}
+                <span class="material-symbols-outlined" style="font-size:14px; vertical-align:-2px; margin-left:2px;">lock</span>
+                {% endif %}
+              </span>
+              <input type="text" readonly
+                     value="{{ request.scheme }}://{{ request.get_host }}{% url 'projects:share_gate' row.link.token %}"
+                     style="flex:1; min-width:0; font-size:11px; font-family:monospace; padding:4px 8px;
+                            border:1px solid var(--md-sys-color-outline-variant); border-radius:4px;
+                            background:var(--md-sys-color-surface-container);
+                            color:var(--md-sys-color-on-surface); cursor:pointer;"
+                     onclick="this.select(); document.execCommand('copy');" title="Click to copy">
+              <button class="md-icon-button" style="color:var(--md-sys-color-error); flex-shrink:0;"
+                      onclick="deleteVideoShareLink('{{ row.link.token }}')" title="Delete link">
+                <span class="material-symbols-outlined" style="font-size:18px;">delete</span>
+              </button>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </details>
+  </div>
+  {% endif %}
+
   <!-- Video Grid -->
   {% if videos %}
     <div class="video-grid">

@@ -1,3 +1,4 @@
+import os
 import uuid
 
 from django.conf import settings
@@ -51,6 +52,20 @@ class Gallery(models.Model):
 class Video(models.Model):
     """A video recording belonging to a gallery."""
 
+    # Health states populated by recording.health.classify_file() (via ffprobe).
+    HEALTH_UNKNOWN    = "unknown"
+    HEALTH_OK         = "ok"
+    HEALTH_AUDIO_ONLY = "audio_only"
+    HEALTH_CORRUPTED  = "corrupted"
+    HEALTH_EMPTY      = "empty"
+    HEALTH_CHOICES = [
+        (HEALTH_UNKNOWN,    "Unknown"),
+        (HEALTH_OK,         "OK"),
+        (HEALTH_AUDIO_ONLY, "Audio only — no video stream"),
+        (HEALTH_CORRUPTED,  "Corrupted — container unreadable"),
+        (HEALTH_EMPTY,      "Empty — no decodable streams"),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     gallery = models.ForeignKey(
         Gallery,
@@ -66,6 +81,13 @@ class Video(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     thumbnail = models.ImageField(upload_to="thumbnails/", null=True, blank=True)
 
+    health_status = models.CharField(
+        max_length=20, choices=HEALTH_CHOICES, default=HEALTH_UNKNOWN,
+        help_text="Result of automated ffprobe health check.",
+    )
+    health_checked_at = models.DateTimeField(null=True, blank=True)
+    health_detail = models.TextField(blank=True, help_text="ffprobe error or note.")
+
     class Meta:
         ordering = ["-elo_rating"]
 
@@ -80,10 +102,19 @@ class Video(models.Model):
     def project_id(self):
         return self.gallery.project_id
 
+    @property
+    def is_unhealthy(self):
+        return self.health_status not in (self.HEALTH_UNKNOWN, self.HEALTH_OK)
+
     def save(self, *args, **kwargs):
-        # On first save, ensure the file is stored under videos/<project_id>/<video_id>.webm
+        # On first save, place the file under videos/<project_id>/, preserving
+        # whatever extension the recorder produced (mp4 / webm / ogg). The old
+        # code forced .webm here which re-corrupted iOS MP4 recordings.
         if self.file and not self.file.name.startswith(f"videos/{self.gallery.project_id}/"):
-            self.file.name = f"videos/{self.gallery.project_id}/{self.id}.webm"
+            ext = os.path.splitext(self.file.name)[1].lstrip(".").lower() or "webm"
+            if ext not in ("mp4", "webm", "ogg", "mov", "mkv"):
+                ext = "webm"
+            self.file.name = f"videos/{self.gallery.project_id}/{self.id}.{ext}"
         super().save(*args, **kwargs)
 
 

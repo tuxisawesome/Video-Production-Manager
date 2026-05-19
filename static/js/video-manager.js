@@ -105,6 +105,27 @@ function openSidebar(cardEl) {
     sidebarFields.size.textContent      = formatBytes(parseInt(videoSize, 10));
     sidebarFields.elo.textContent       = parseFloat(videoElo).toFixed(0);
 
+    // Health banner — show only if the server flagged this recording.
+    const healthBanner = document.getElementById('sidebar-health-banner');
+    if (healthBanner) {
+        const health = cardEl.dataset.videoHealth || 'unknown';
+        const detail = cardEl.dataset.videoHealthDetail || '';
+        if (health && health !== 'unknown' && health !== 'ok') {
+            const titleEl = document.getElementById('sidebar-health-title');
+            const detailEl = document.getElementById('sidebar-health-detail');
+            const labels = {
+                'audio_only': 'Audio only — no video track',
+                'corrupted':  'Corrupted — container unreadable',
+                'empty':      'Empty — no decodable streams',
+            };
+            if (titleEl) titleEl.textContent = labels[health] || 'Recording problem detected';
+            if (detailEl) detailEl.textContent = detail || 'Try re-recording this clip.';
+            healthBanner.style.display = 'flex';
+        } else {
+            healthBanner.style.display = 'none';
+        }
+    }
+
     // Build download URL
     const basePath = window.location.pathname.replace(/\/$/, '');
     sidebarDownloadLink.href = basePath + '/videos/' + videoId + '/download/';

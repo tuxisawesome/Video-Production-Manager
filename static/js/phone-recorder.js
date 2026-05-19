@@ -97,6 +97,148 @@ function logError(tag, ...args) {
 }
 
 // ---------------------------------------------------------------------------
+// IndexedDB local chunk backup
+// ---------------------------------------------------------------------------
+// Every chunk produced by MediaRecorder is mirrored into IndexedDB *as well
+// as* uploaded. The local copy is only cleared once the server confirms the
+// finalize succeeded and the resulting Video passed its health check.
+//
+// On phone-recorder load, init() scans IDB for any orphaned recording (a
+// recording whose chunks are still present after a refresh / crash / network
+// failure) and silently retries the upload. The user is never prompted.
+
+const IDB_DB_NAME    = 'phone-recorder-backup';
+const IDB_DB_VERSION = 1;
+const IDB_CHUNK_STORE      = 'chunks';     // {id: token+'_'+index, token, index, blob, mime}
+const IDB_RECORDING_STORE  = 'recordings'; // {token, started_at, mime_type, finalized}
+
+let _idb = null;
+let _idbReady = null;
+
+function _openIdb() {
+    if (_idbReady) return _idbReady;
+    _idbReady = new Promise((resolve, reject) => {
+        if (!('indexedDB' in window)) {
+            log('IDB', 'IndexedDB unavailable — local backup disabled');
+            resolve(null);
+            return;
+        }
+        const req = window.indexedDB.open(IDB_DB_NAME, IDB_DB_VERSION);
+        req.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(IDB_CHUNK_STORE)) {
+                const s = db.createObjectStore(IDB_CHUNK_STORE, { keyPath: 'id' });
+                s.createIndex('token', 'token', { unique: false });
+            }
+            if (!db.objectStoreNames.contains(IDB_RECORDING_STORE)) {
+                db.createObjectStore(IDB_RECORDING_STORE, { keyPath: 'token' });
+            }
+        };
+        req.onsuccess = (e) => { _idb = e.target.result; resolve(_idb); };
+        req.onerror   = (e) => { log('IDB', 'open failed:', e.target.error); resolve(null); };
+    });
+    return _idbReady;
+}
+
+async function idbPutChunk(token, index, blob, mime) {
+    const db = await _openIdb();
+    if (!db) return;
+    return new Promise((resolve) => {
+        try {
+            const tx = db.transaction([IDB_CHUNK_STORE], 'readwrite');
+            tx.objectStore(IDB_CHUNK_STORE).put({
+                id:    `${token}_${String(index).padStart(6, '0')}`,
+                token, index, blob, mime,
+            });
+            tx.oncomplete = () => resolve();
+            tx.onerror    = () => resolve();
+        } catch (e) {
+            log('IDB', 'putChunk failed:', e.message);
+            resolve();
+        }
+    });
+}
+
+async function idbMarkRecording(token, mime) {
+    const db = await _openIdb();
+    if (!db) return;
+    return new Promise((resolve) => {
+        try {
+            const tx = db.transaction([IDB_RECORDING_STORE], 'readwrite');
+            tx.objectStore(IDB_RECORDING_STORE).put({
+                token,
+                mime_type:  mime || '',
+                started_at: Date.now(),
+                finalized:  false,
+            });
+            tx.oncomplete = () => resolve();
+            tx.onerror    = () => resolve();
+        } catch (e) {
+            resolve();
+        }
+    });
+}
+
+async function idbClearSession(token) {
+    const db = await _openIdb();
+    if (!db) return;
+    return new Promise((resolve) => {
+        try {
+            const tx = db.transaction([IDB_CHUNK_STORE, IDB_RECORDING_STORE], 'readwrite');
+            const chunks = tx.objectStore(IDB_CHUNK_STORE);
+            const idx = chunks.index('token');
+            const req = idx.openCursor(IDBKeyRange.only(token));
+            req.onsuccess = (e) => {
+                const cursor = e.target.result;
+                if (cursor) { cursor.delete(); cursor.continue(); }
+            };
+            tx.objectStore(IDB_RECORDING_STORE).delete(token);
+            tx.oncomplete = () => resolve();
+            tx.onerror    = () => resolve();
+        } catch (e) {
+            resolve();
+        }
+    });
+}
+
+async function idbListOrphans() {
+    const db = await _openIdb();
+    if (!db) return [];
+    return new Promise((resolve) => {
+        try {
+            const tx = db.transaction([IDB_RECORDING_STORE], 'readonly');
+            const req = tx.objectStore(IDB_RECORDING_STORE).getAll();
+            req.onsuccess = () => {
+                const all = req.result || [];
+                resolve(all.filter(r => !r.finalized));
+            };
+            req.onerror = () => resolve([]);
+        } catch (e) {
+            resolve([]);
+        }
+    });
+}
+
+async function idbGetChunks(token) {
+    const db = await _openIdb();
+    if (!db) return [];
+    return new Promise((resolve) => {
+        try {
+            const tx = db.transaction([IDB_CHUNK_STORE], 'readonly');
+            const idx = tx.objectStore(IDB_CHUNK_STORE).index('token');
+            const req = idx.getAll(IDBKeyRange.only(token));
+            req.onsuccess = () => {
+                const all = (req.result || []).slice().sort((a, b) => a.index - b.index);
+                resolve(all);
+            };
+            req.onerror = () => resolve([]);
+        } catch (e) {
+            resolve([]);
+        }
+    });
+}
+
+// ---------------------------------------------------------------------------
 // UI helpers
 // ---------------------------------------------------------------------------
 
@@ -448,7 +590,10 @@ function onDataAvailable(event) {
     if (isDiscarding) return;
     if (event.data && event.data.size > 0) {
         totalBytesQueued += event.data.size;
+        const myIndex = chunkIndex + chunkQueue.length;  // index the upload will use
         chunkQueue.push(event.data);
+        // Mirror to IndexedDB asynchronously — never blocks upload.
+        idbPutChunk(config.token, myIndex, event.data, currentMimeType).catch(() => {});
         processChunkQueue();
     }
 }
@@ -553,11 +698,30 @@ async function finalizeRecording() {
 
         const data = await response.json();
         const videoId = data.video_id;
+        const health = data.health_status || 'unknown';
+        const healthDetail = data.health_detail || '';
 
-        wsSend({ type: 'status_update', status: 'status_upload_complete', data: { video_id: videoId } });
-        log('Finalize', `Complete. video_id=${videoId}`);
+        wsSend({
+            type: 'status_update',
+            status: 'status_upload_complete',
+            data: { video_id: videoId, health_status: health, health_detail: healthDetail },
+        });
+        log('Finalize', `Complete. video_id=${videoId}  health=${health}`);
 
-        setStatusText('Upload complete');
+        // Only clear the local backup if the server confirmed the recording
+        // is healthy. If it's flagged as audio-only / corrupted / empty, keep
+        // the IDB copy around so a future recovery pass can re-upload it.
+        if (health === 'ok' || health === 'unknown') {
+            idbClearSession(config.token).catch(() => {});
+        } else {
+            log('Finalize', `Recording flagged unhealthy (${health}). Keeping local backup.`);
+        }
+
+        if (health === 'ok' || health === 'unknown') {
+            setStatusText('Upload complete');
+        } else {
+            setStatusText(`Saved but flagged: ${health.replace('_', ' ')}`);
+        }
         hideUploadProgress();
         resetRecordingState();
     } catch (err) {
@@ -592,6 +756,9 @@ async function discardRecording() {
     }
 
     wsSend({ type: 'status_update', status: 'status_discarded', data: {} });
+
+    // User explicitly discarded — wipe the local backup too.
+    idbClearSession(config.token).catch(() => {});
 
     isRecording = false;
     resetTimer();
@@ -654,6 +821,9 @@ function handleStartCommand() {
         isRecording = false;
         return;
     }
+
+    // Mark the recording in IDB so we can recover if finalize never completes.
+    idbMarkRecording(config.token, currentMimeType).catch(() => {});
 
     wsSend({ type: 'status_update', status: 'status_recording', data: {} });
     log('Command', 'Recording started');
@@ -849,6 +1019,102 @@ function cleanup() {
 window.addEventListener('beforeunload', cleanup);
 window.addEventListener('pagehide', cleanup);
 
+// ---------------------------------------------------------------------------
+// Silent recovery of orphan recordings
+// ---------------------------------------------------------------------------
+// On page load, look for any recording in IndexedDB that was never marked
+// finalized (its chunks survived a crash, refresh, or network failure).
+// Try to re-upload its chunks to the server's existing endpoint. The server's
+// chunk endpoint is idempotent (writes by chunk_index), so even if the
+// chunks already partially landed, the file ends up correct. If the session
+// token is still valid, finalize. If finalize fails (e.g. session expired),
+// keep the IDB copy for a future recovery attempt.
+
+async function recoverOrphanRecordings() {
+    let orphans = [];
+    try {
+        orphans = await idbListOrphans();
+    } catch (e) {
+        return;
+    }
+    if (!orphans.length) return;
+
+    log('Recovery', `Found ${orphans.length} orphan recording(s) in local backup`);
+
+    for (const rec of orphans) {
+        // Skip the current session — that's an active recording, not an orphan.
+        if (rec.token === config.token) continue;
+
+        const chunks = await idbGetChunks(rec.token);
+        if (!chunks.length) {
+            // Empty record, just remove it.
+            await idbClearSession(rec.token);
+            continue;
+        }
+
+        log('Recovery', `Re-uploading ${chunks.length} chunk(s) for token=${rec.token}`);
+        let uploadedAll = true;
+        for (const c of chunks) {
+            try {
+                const fd = new FormData();
+                fd.append('chunk', c.blob, `chunk_${c.index}`);
+                fd.append('chunk_index', String(c.index));
+                // The chunk upload URL is the same path with the orphan token.
+                const url = config.chunkUrl.replace(config.token, rec.token);
+                const resp = await fetch(url, { method: 'POST', body: fd });
+                if (!resp.ok) { uploadedAll = false; break; }
+            } catch (e) {
+                uploadedAll = false;
+                break;
+            }
+        }
+        if (!uploadedAll) {
+            log('Recovery', `Upload failed for token=${rec.token} — keeping backup`);
+            continue;
+        }
+
+        // Try to finalize.
+        try {
+            const url = config.finalizeUrl.replace(config.token, rec.token);
+            const resp = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mime_type: rec.mime_type || '' }),
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                const ok = data.health_status === 'ok' || data.health_status === 'unknown';
+                if (ok) {
+                    await idbClearSession(rec.token);
+                    log('Recovery', `Recovered token=${rec.token} → video_id=${data.video_id}`);
+                } else {
+                    log('Recovery', `Recovered but flagged ${data.health_status}; keeping backup`);
+                }
+            } else if (resp.status === 403) {
+                // Session expired — there's nothing we can do server-side. Keep
+                // the backup so the user can re-record fresh; the chunks will
+                // eventually age out via the manual cleanup below.
+                log('Recovery', `Session ${rec.token} expired (403). Cannot finalize.`);
+            } else {
+                log('Recovery', `Finalize returned ${resp.status}; keeping backup`);
+            }
+        } catch (e) {
+            log('Recovery', `Finalize error for token=${rec.token}:`, e.message);
+        }
+    }
+
+    // Drop very old orphans (>24h) regardless — they're never going to
+    // recover and they're just taking up space.
+    try {
+        const stale = (await idbListOrphans())
+            .filter(r => Date.now() - (r.started_at || 0) > 24 * 3600 * 1000);
+        for (const r of stale) {
+            await idbClearSession(r.token);
+            log('Recovery', `Pruned stale orphan from ${new Date(r.started_at).toISOString()}`);
+        }
+    } catch (e) {}
+}
+
 async function init() {
     log('Init', 'Starting phone recorder...');
 
@@ -861,6 +1127,9 @@ async function init() {
     }
 
     connectWebSocket();
+
+    // Run orphan recovery in the background — never block the main flow.
+    recoverOrphanRecordings().catch((e) => log('Recovery', 'failed:', e.message));
 }
 
 init();

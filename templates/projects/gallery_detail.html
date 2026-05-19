@@ -136,6 +136,8 @@
              data-video-duration="{{ video.duration_seconds|default:'--' }}"
              data-video-size="{{ video.file_size_bytes }}"
              data-video-elo="{{ video.elo_rating }}"
+             data-video-health="{{ video.health_status }}"
+             data-video-health-detail="{{ video.health_detail }}"
              data-comment-url="{% url 'projects:comment_list' project.pk gallery.pk video.pk %}"
              data-comment-create-url="{% url 'projects:comment_create' project.pk gallery.pk video.pk %}"
              data-comment-delete-base="{% url 'projects:comment_list' project.pk gallery.pk video.pk %}"
@@ -162,6 +164,16 @@
           </div>
           <div class="video-info">
             <span class="video-title">{{ video.filename_original|default:video.pk }}</span>
+            {% if video.is_unhealthy %}
+            <span class="md-label-small" title="{{ video.health_detail }}"
+                  style="display:inline-flex; align-items:center; gap:4px; padding:2px 8px;
+                         margin-top:2px; border-radius:8px;
+                         background:var(--md-sys-color-error-container);
+                         color:var(--md-sys-color-on-error-container); font-size:11px; width:fit-content;">
+              <span class="material-symbols-outlined" style="font-size:14px;">warning</span>
+              {{ video.get_health_status_display }}
+            </span>
+            {% endif %}
             <div class="video-meta">
               <span>Elo: {{ video.elo_rating|floatformat:0 }}</span>
               <span>{{ video.created_at|date:"M j, Y" }}</span>
@@ -214,6 +226,17 @@
     </button>
   </div>
   <div class="md-sidebar-content" style="overflow-y:auto;">
+    <div id="sidebar-health-banner" style="display:none; padding:10px 12px; margin-bottom:12px;
+         border-radius:var(--md-sys-shape-corner-small);
+         background:var(--md-sys-color-error-container);
+         color:var(--md-sys-color-on-error-container);
+         display:none; align-items:flex-start; gap:8px;">
+      <span class="material-symbols-outlined" style="font-size:20px; flex-shrink:0; margin-top:1px;">warning</span>
+      <div style="flex:1; min-width:0;">
+        <div class="md-label-medium" id="sidebar-health-title" style="margin-bottom:2px;">Recording problem detected</div>
+        <div class="md-body-small" id="sidebar-health-detail"></div>
+      </div>
+    </div>
     <video id="sidebar-player" controls style="width:100%; border-radius:var(--md-sys-shape-corner-medium); background:#000; margin-bottom:16px;"></video>
     <div class="flex-col gap-sm" style="margin-bottom:20px;">
       <div>

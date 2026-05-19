@@ -217,7 +217,20 @@ def phone_finalize(request, token):
         file_size_bytes=file_size,
     )
 
-    return JsonResponse({'success': True, 'video_id': str(video.id)})
+    # Run an automatic ffprobe-based health check so we can warn the phone
+    # immediately if the upload landed but the container is unplayable or
+    # contains no video stream. The phone uses this to decide whether to
+    # discard its IndexedDB backup of the recording (healthy) or keep it
+    # for a manual recovery attempt (unhealthy).
+    from recording.health import update_video_health
+    health = update_video_health(video)
+
+    return JsonResponse({
+        'success': True,
+        'video_id': str(video.id),
+        'health_status': health,
+        'health_detail': video.health_detail,
+    })
 
 
 @csrf_exempt

@@ -319,13 +319,24 @@ function handleStatusUpdate(status, data) {
             break;
         }
 
-        case 'status_upload_complete':
+        case 'status_upload_complete': {
             recordingCount += 1;
             updateRecordingCount();
             hideUploadProgress();
-            setRecordingStatus('Upload complete. Ready for next recording.', 'check_circle', 'var(--md-sys-color-primary)');
+            const h = data.health_status || 'unknown';
+            if (h && h !== 'ok' && h !== 'unknown') {
+                const labels = {
+                    'audio_only': 'Recording saved but has NO video — check the camera and try again.',
+                    'corrupted':  'Recording saved but the file is corrupted — re-record this clip.',
+                    'empty':      'Recording saved but is empty — re-record this clip.',
+                };
+                setRecordingStatus(labels[h] || `Recording flagged: ${h}`, 'warning', 'var(--md-sys-color-error)');
+            } else {
+                setRecordingStatus('Upload complete. Ready for next recording.', 'check_circle', 'var(--md-sys-color-primary)');
+            }
             resetTimer();
             break;
+        }
 
         case 'status_discarded':
             isRecording = false;

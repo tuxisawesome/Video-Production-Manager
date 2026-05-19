@@ -223,6 +223,23 @@ async function initCamera() {
     const resolution = RESOLUTION_MAP[config.settings.video_resolution] || RESOLUTION_MAP['1080p'];
     const frameRate = config.settings.frame_rate || 30;
 
+    // Explicit audio constraints — passing `true` accepts browser defaults,
+    // which on iOS Safari enables AGC + noise suppression + echo cancellation.
+    // All three are voice-call DSP and destroy music recording. We disable
+    // them and do our own normalization via DynamicsCompressorNode downstream.
+    const audioConstraints = config.settings.audio_enabled === true ? {
+        autoGainControl:    false,
+        echoCancellation:   false,
+        noiseSuppression:   false,
+        // Some Chromium-derived browsers still honor these legacy names:
+        googAutoGainControl: false,
+        googEchoCancellation: false,
+        googNoiseSuppression: false,
+        // High-quality capture for music:
+        sampleRate:   { ideal: 48000 },
+        channelCount: { ideal: 2 },
+    } : false;
+
     const constraints = {
         video: {
             width:      { ideal: resolution.width },
@@ -230,7 +247,7 @@ async function initCamera() {
             frameRate:  { ideal: frameRate },
             facingMode: { ideal: 'environment' },
         },
-        audio: config.settings.audio_enabled === true,
+        audio: audioConstraints,
     };
 
     try {
@@ -294,22 +311,24 @@ function applyAudioNormalization(rawStream) {
         audioCtx = new AudioCtxCls();
         const source = audioCtx.createMediaStreamSource(rawStream);
 
-        // Compressor settings tuned for music playback recording:
-        //   threshold -24 dB    : start compressing well below clipping
-        //   knee 30 dB          : wide soft knee → natural sound
-        //   ratio 12:1          : aggressive ratio to flatten peaks
-        //   attack 3 ms         : fast attack catches transients
-        //   release 250 ms      : musical release time
+        // Light "glue" compression — assumes browser AGC has been disabled
+        // upstream. Goal is to catch occasional peaks, not to flatten the
+        // dynamics of the music.
+        //   threshold -18 dB    : only engage on louder material
+        //   knee 12 dB          : moderate soft knee, transparent
+        //   ratio 3:1           : gentle, doesn't pump on transients
+        //   attack 20 ms        : slow enough that drum hits pass through
+        //   release 200 ms      : musical, not audible as gain riding
         const compressor = audioCtx.createDynamicsCompressor();
-        compressor.threshold.value = -24;
-        compressor.knee.value = 30;
-        compressor.ratio.value = 12;
-        compressor.attack.value = 0.003;
-        compressor.release.value = 0.25;
+        compressor.threshold.value = -18;
+        compressor.knee.value = 12;
+        compressor.ratio.value = 3;
+        compressor.attack.value = 0.020;
+        compressor.release.value = 0.200;
 
-        // Add a small make-up gain so the compressed signal isn't too quiet.
+        // Small make-up gain to compensate for compression headroom.
         const makeup = audioCtx.createGain();
-        makeup.gain.value = 1.6;
+        makeup.gain.value = 1.2;
 
         const dest = audioCtx.createMediaStreamDestination();
         source.connect(compressor);

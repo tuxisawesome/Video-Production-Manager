@@ -325,6 +325,10 @@ function _vslShowError(msg) {
 }
 
 async function createVideoShareLink() {
+    // Immediate visible proof the function was called
+    const vslContainer = document.getElementById('video-share-links');
+    if (vslContainer) vslContainer.innerHTML = '<span style="color:blue;font-weight:bold;">⏳ Generating…</span>';
+
     console.log('[Share] createVideoShareLink called, url=', _videoShareCreateUrl);
 
     if (!_videoShareCreateUrl) {

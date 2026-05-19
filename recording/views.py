@@ -225,6 +225,16 @@ def phone_finalize(request, token):
     from recording.health import update_video_health
     health = update_video_health(video)
 
+    # Generate a thumbnail for healthy recordings (and ones we couldn't probe
+    # — sometimes the file plays fine even if ffprobe disagreed).
+    if health in (Video.HEALTH_OK, Video.HEALTH_UNKNOWN):
+        try:
+            from recording.thumbnails import generate_thumbnail
+            generate_thumbnail(video)
+        except Exception:
+            # Thumbnail failure should never block finalize.
+            pass
+
     return JsonResponse({
         'success': True,
         'video_id': str(video.id),

@@ -74,6 +74,19 @@ function formatTimestamp(secs) {
     return m > 0 ? `${m}:${s}` : `${s}s`;
 }
 
+// m:ss / h:mm:ss formatting for video durations (matches the duration_mmss
+// template filter so card labels and the sidebar agree).
+function formatDuration(totalSeconds) {
+    const t = Number(totalSeconds);
+    if (!Number.isFinite(t) || t <= 0) return '--';
+    const rounded = Math.round(t);
+    const h = Math.floor(rounded / 3600);
+    const m = Math.floor((rounded % 3600) / 60);
+    const s = rounded % 60;
+    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    return `${m}:${String(s).padStart(2, '0')}`;
+}
+
 // ---------------------------------------------------------------------------
 // Sidebar: open / close
 // ---------------------------------------------------------------------------
@@ -100,7 +113,7 @@ function openSidebar(cardEl) {
     sidebarTitle.textContent            = videoName;
     sidebarFields.filename.textContent  = videoName;
     sidebarFields.duration.textContent  = videoDuration !== '--'
-        ? parseFloat(videoDuration).toFixed(1) + 's'
+        ? formatDuration(parseFloat(videoDuration))
         : 'Unknown';
     sidebarFields.size.textContent      = formatBytes(parseInt(videoSize, 10));
     sidebarFields.elo.textContent       = parseFloat(videoElo).toFixed(0);

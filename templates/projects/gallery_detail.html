@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
+{% load video_filters %}
 
 {% block title %}{{ gallery.name }} - {{ project.name }} - Video Production Manager{% endblock %}
 
@@ -156,7 +157,7 @@
               </div>
             {% endif %}
             {% if video.duration_seconds %}
-              <span class="video-duration">{{ video.duration_seconds|floatformat:0 }}s</span>
+              <span class="video-duration">{{ video.duration_seconds|duration_mmss }}</span>
             {% endif %}
             <div class="video-status-overlay">
               <span class="md-badge large" style="background-color:var(--md-sys-color-primary); color:var(--md-sys-color-on-primary);">#{{ forloop.counter }}</span>

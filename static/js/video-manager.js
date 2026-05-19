@@ -358,6 +358,65 @@ function _appendVideoShareLink(sl) {
         url: sl.url,
         delete_url: sl.delete_url || '',
     }]);
+    // Mirror the new link into the gallery-level "Video Share Links" table.
+    const videoName = _currentCard ? (_currentCard.dataset.videoName || '') : '';
+    _appendGalleryShareRow(sl, videoName);
+}
+
+// Build a row matching the server-rendered #gallery-share-tbody markup and
+// keep the summary count + empty-state in sync.
+function _appendGalleryShareRow(sl, videoName) {
+    const tbody = document.getElementById('gallery-share-tbody');
+    if (!tbody) return;
+    const role = _shortRole(sl.access_type_display);
+    const lockHtml = sl.has_password
+        ? '<span class="material-symbols-outlined" style="font-size:14px; vertical-align:-2px; margin-left:2px;">lock</span>'
+        : '';
+
+    const row = document.createElement('div');
+    row.setAttribute('data-token', sl.token);
+    row.style.cssText = 'display:flex; align-items:center; gap:8px; flex-wrap:nowrap; ' +
+                        'padding:8px 4px; border-bottom:1px solid var(--md-sys-color-outline-variant);';
+    row.innerHTML = `
+      <span class="md-body-small" title="${escapeHtml(videoName)}"
+            style="flex:0 0 28%; min-width:0; overflow:hidden;
+                   text-overflow:ellipsis; white-space:nowrap;">
+        ${escapeHtml(videoName)}
+      </span>
+      <span class="md-chip" style="background:var(--md-sys-color-secondary-container);
+                                   color:var(--md-sys-color-on-secondary-container);
+                                   font-size:12px; padding:2px 8px; border-radius:8px;
+                                   white-space:nowrap; flex-shrink:0;">
+        ${escapeHtml(role)}${lockHtml}
+      </span>
+      <input type="text" readonly value="${escapeHtml(sl.url)}"
+             style="flex:1; min-width:0; font-size:11px; font-family:monospace; padding:4px 8px;
+                    border:1px solid var(--md-sys-color-outline-variant); border-radius:4px;
+                    background:var(--md-sys-color-surface-container);
+                    color:var(--md-sys-color-on-surface); cursor:pointer;"
+             onclick="this.select(); document.execCommand('copy');" title="Click to copy">
+      <button class="md-icon-button" style="color:var(--md-sys-color-error); flex-shrink:0;"
+              onclick="deleteVideoShareLink('${escapeHtml(sl.token)}')" title="Delete link">
+        <span class="material-symbols-outlined" style="font-size:18px;">delete</span>
+      </button>`;
+    tbody.appendChild(row);
+
+    // Reveal the table container and hide the empty-state message.
+    const tableWrap = document.getElementById('gallery-share-table');
+    if (tableWrap) tableWrap.style.display = '';
+    const emptyEl = document.getElementById('gallery-share-empty');
+    if (emptyEl) emptyEl.style.display = 'none';
+
+    _refreshGalleryShareCount();
+}
+
+// Recompute the "N link(s)" label in the <summary> tag from current DOM.
+function _refreshGalleryShareCount() {
+    const tbody = document.getElementById('gallery-share-tbody');
+    if (!tbody) return;
+    const n = tbody.querySelectorAll('[data-token]').length;
+    const countEl = document.getElementById('gallery-share-count');
+    if (countEl) countEl.textContent = `${n} link${n === 1 ? '' : 's'}`;
 }
 
 // Keep the embedded JSON inside the current card in sync with whatever we
@@ -467,7 +526,10 @@ async function deleteVideoShareLink(token) {
             if (tbody && !tbody.children.length) {
                 const empty = document.getElementById('gallery-share-empty');
                 if (empty) empty.style.display = '';
+                const tableWrap = document.getElementById('gallery-share-table');
+                if (tableWrap) tableWrap.style.display = 'none';
             }
+            _refreshGalleryShareCount();
         } else {
             alert(`Failed to delete link (${resp.status}).`);
         }

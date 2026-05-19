@@ -58,6 +58,19 @@ urlpatterns = [
         name="video_delete",
     ),
     path(
+        "<uuid:pk>/galleries/<uuid:gallery_pk>/videos/<uuid:video_id>/rename/",
+        views.video_rename,
+        name="video_rename",
+    ),
+    path(
+        "<uuid:pk>/galleries/<uuid:gallery_pk>/videos/<uuid:video_id>/move/",
+        views.video_move,
+        name="video_move",
+    ),
+    path("video-bulk-move/",   views.video_bulk_move,   name="video_bulk_move"),
+    path("video-bulk-delete/", views.video_bulk_delete, name="video_bulk_delete"),
+    path("gallery-picker/",    views.gallery_picker_list, name="gallery_picker_list"),
+    path(
         "<uuid:pk>/galleries/<uuid:gallery_pk>/videos/<uuid:video_id>/share-links/",
         views.video_share_link_list_view,
         name="video_share_link_list",

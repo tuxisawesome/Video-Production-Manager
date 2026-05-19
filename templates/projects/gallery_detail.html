@@ -2,6 +2,46 @@
 {% load static %}
 {% load video_filters %}
 
+{% block extra_head %}
+<style>
+  /* List view — compact rows for fitting many videos */
+  #videos-container.video-list { display:flex; flex-direction:column; gap:4px; }
+  #videos-container.video-list .video-card {
+    display:grid; grid-template-columns: 120px 1fr auto auto auto; gap:12px;
+    align-items:center; padding:6px 12px; min-height:64px;
+    background:var(--md-sys-color-surface-container);
+    border-radius:var(--md-sys-shape-corner-small); cursor:pointer;
+  }
+  #videos-container.video-list .video-card:hover { background:var(--md-sys-color-surface-container-high); }
+  #videos-container.video-list .video-thumbnail {
+    width:120px; height:68px; flex-shrink:0; position:relative;
+    border-radius:var(--md-sys-shape-corner-extra-small); overflow:hidden;
+  }
+  #videos-container.video-list .video-thumbnail img { width:100%; height:100%; object-fit:cover; }
+  #videos-container.video-list .video-status-overlay { display:none; }
+  #videos-container.video-list .video-info {
+    display:flex; flex-direction:column; gap:2px; min-width:0;
+  }
+  #videos-container.video-list .video-title {
+    font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  #videos-container.video-list .video-meta {
+    display:flex; gap:12px; font-size:12px; color:var(--md-sys-color-on-surface-variant);
+  }
+  /* Hide the bottom "padding:4px 12px 12px" actions in list view — they're
+     redundant with the per-card icons we keep visible at the row's right. */
+
+  /* Select mode reveals all checkboxes */
+  .select-mode .video-select-checkbox { display:inline-block !important; }
+
+  /* View toggle active state */
+  .view-toggle .md-icon-button.active {
+    background:var(--md-sys-color-secondary-container);
+    color:var(--md-sys-color-on-secondary-container);
+  }
+</style>
+{% endblock %}
+
 {% block title %}{{ gallery.name }} - {{ project.name }} - Video Production Manager{% endblock %}
 
 {% block content %}
@@ -81,6 +121,26 @@
     </div>
     <div class="action-spacer"></div>
     <div class="action-group">
+      {% if is_owner and videos %}
+        <button type="button" id="select-mode-btn" class="md-button-outlined" onclick="toggleSelectMode();">
+          <span class="material-symbols-outlined">check_box</span>
+          <span id="select-mode-label">Select</span>
+        </button>
+      {% endif %}
+      {% if videos %}
+        <div class="view-toggle" role="group" aria-label="View"
+             style="display:inline-flex; border:1px solid var(--md-sys-color-outline-variant);
+                    border-radius:var(--md-sys-shape-corner-small); overflow:hidden;">
+          <button type="button" id="view-grid-btn" class="md-icon-button" onclick="setViewMode('grid');" title="Grid view"
+                  style="border-radius:0; width:36px; height:36px;">
+            <span class="material-symbols-outlined" style="font-size:20px;">grid_view</span>
+          </button>
+          <button type="button" id="view-list-btn" class="md-icon-button" onclick="setViewMode('list');" title="List view"
+                  style="border-radius:0; width:36px; height:36px;">
+            <span class="material-symbols-outlined" style="font-size:20px;">view_list</span>
+          </button>
+        </div>
+      {% endif %}
       {% if is_owner %}
         <button type="button" class="md-button-text" style="color:var(--md-sys-color-error);"
                 onclick="document.getElementById('delete-gallery-dialog').classList.add('open');">
@@ -185,9 +245,30 @@
   </div>
   {% endif %}
 
+  {% if is_owner %}
+  <!-- Bulk action bar (visible in select mode with items selected) -->
+  <div id="bulk-action-bar" style="display:none; position:sticky; top:0; z-index:50;
+       padding:12px 16px; margin-bottom:12px; border-radius:var(--md-sys-shape-corner-small);
+       background:var(--md-sys-color-primary-container); color:var(--md-sys-color-on-primary-container);
+       align-items:center; gap:12px; flex-wrap:wrap;">
+    <span class="md-title-small"><span id="bulk-selected-count">0</span> selected</span>
+    <span class="action-spacer" style="flex:1;"></span>
+    <button type="button" class="md-button-tonal" onclick="openMoveDialog();">
+      <span class="material-symbols-outlined">drive_file_move</span>
+      Move…
+    </button>
+    <button type="button" class="md-button-text" style="color:var(--md-sys-color-error);"
+            onclick="confirmBulkDelete();">
+      <span class="material-symbols-outlined">delete</span>
+      Delete
+    </button>
+    <button type="button" class="md-button-text" onclick="clearSelection();">Clear</button>
+  </div>
+  {% endif %}
+
   <!-- Video Grid -->
   {% if videos %}
-    <div class="video-grid">
+    <div id="videos-container" class="video-grid">
       {% for video in videos %}
         <div class="video-card" data-video-id="{{ video.pk }}"
              data-video-url="{% url 'projects:video_stream' project.pk gallery.pk video.pk %}"
@@ -220,6 +301,16 @@
             <div class="video-status-overlay">
               <span class="md-badge large" style="background-color:var(--md-sys-color-primary); color:var(--md-sys-color-on-primary);">#{{ forloop.counter }}</span>
             </div>
+            {% if is_owner %}
+            <label class="video-select-checkbox"
+                   style="display:none; position:absolute; top:8px; left:8px; z-index:5;
+                          background:rgba(0,0,0,0.6); padding:4px 6px; border-radius:6px; cursor:pointer;"
+                   onclick="event.stopPropagation();">
+              <input type="checkbox" class="vid-select-cb" data-video-id="{{ video.pk }}"
+                     onchange="onSelectionChange(event)" onclick="event.stopPropagation();"
+                     style="accent-color:var(--md-sys-color-primary); width:18px; height:18px; cursor:pointer; vertical-align:middle;">
+            </label>
+            {% endif %}
           </div>
           <div class="video-info">
             <span class="video-title">{{ video.filename_original|default:video.pk }}</span>
@@ -280,6 +371,14 @@
 <aside id="video-sidebar" class="md-sidebar" style="width:420px; max-width:95vw;">
   <div class="md-sidebar-header">
     <span class="title" id="sidebar-title">Video Preview</span>
+    {% if is_owner %}
+    <button type="button" class="md-icon-button" onclick="startSidebarRename();" aria-label="Rename" title="Rename">
+      <span class="material-symbols-outlined">edit</span>
+    </button>
+    <button type="button" class="md-icon-button" onclick="openMoveDialogForCurrentVideo();" aria-label="Move" title="Move to another gallery">
+      <span class="material-symbols-outlined">drive_file_move</span>
+    </button>
+    {% endif %}
     <button type="button" class="md-icon-button" onclick="closeSidebar();" aria-label="Close">
       <span class="material-symbols-outlined">close</span>
     </button>
@@ -552,6 +651,56 @@
 </div>
 {% endif %}
 
+{% if is_owner %}
+<!-- Move videos dialog -->
+<div id="move-dialog" class="md-dialog-overlay" onclick="if(event.target===this)this.classList.remove('open');">
+  <div class="md-dialog" style="max-width:520px; width:100%;">
+    <h2 class="md-dialog-title" style="display:flex; align-items:center; gap:8px;">
+      <span class="material-symbols-outlined">drive_file_move</span>
+      Move <span id="move-dialog-count">video</span>
+    </h2>
+    <div class="md-dialog-content" style="padding:0 24px 8px;">
+      <p class="md-body-small text-on-surface-variant" style="margin:0 0 8px;">
+        Choose a destination gallery. Share links travel with the video and keep working.
+      </p>
+      <input type="text" id="move-filter" placeholder="Filter…"
+             style="width:100%; padding:8px 12px; margin-bottom:12px;
+                    border-radius:var(--md-sys-shape-corner-small);
+                    border:1px solid var(--md-sys-color-outline);
+                    background:var(--md-sys-color-surface-container);
+                    color:var(--md-sys-color-on-surface); font-size:14px; box-sizing:border-box;">
+      <div id="move-targets" style="max-height:320px; overflow-y:auto; display:flex; flex-direction:column; gap:4px;">
+        <span class="md-body-small text-on-surface-variant">Loading galleries…</span>
+      </div>
+    </div>
+    <div class="md-dialog-actions">
+      <button type="button" class="md-button-text"
+              onclick="document.getElementById('move-dialog').classList.remove('open');">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bulk delete confirmation dialog -->
+<div id="bulk-delete-dialog" class="md-dialog-overlay" onclick="if(event.target===this)this.classList.remove('open');">
+  <div class="md-dialog">
+    <div class="md-dialog-icon">
+      <span class="material-symbols-outlined" style="color:var(--md-sys-color-error);">warning</span>
+    </div>
+    <h2 class="md-dialog-title">Delete videos?</h2>
+    <div class="md-dialog-content">
+      This will permanently delete <strong id="bulk-delete-count">0</strong> video(s). This action cannot be undone.
+    </div>
+    <div class="md-dialog-actions">
+      <button type="button" class="md-button-text"
+              onclick="document.getElementById('bulk-delete-dialog').classList.remove('open');">Cancel</button>
+      <button type="button" class="md-button-filled"
+              style="background-color:var(--md-sys-color-error); color:var(--md-sys-color-on-error);"
+              onclick="executeBulkDelete();">Delete</button>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <!-- Page data for JS -->
 <script id="page-data" type="application/json">
 {
@@ -561,6 +710,11 @@
   "canComment": {% if is_owner or role == 'commentator' %}true{% else %}false{% endif %},
   "canDownload": {% if is_owner or role == 'commentator' %}true{% else %}false{% endif %},
   "deleteVideoBaseUrl": "{% url 'projects:video_delete' project.pk gallery.pk '00000000-0000-0000-0000-000000000000' %}",
+  "renameVideoBaseUrl": "{% url 'projects:video_rename' project.pk gallery.pk '00000000-0000-0000-0000-000000000000' %}",
+  "moveVideoBaseUrl":   "{% url 'projects:video_move' project.pk gallery.pk '00000000-0000-0000-0000-000000000000' %}",
+  "bulkMoveUrl":   "{% url 'projects:video_bulk_move' %}",
+  "bulkDeleteUrl": "{% url 'projects:video_bulk_delete' %}",
+  "galleryPickerUrl": "{% url 'projects:gallery_picker_list' %}",
   "shareLinkDeleteBaseUrl": "{% url 'projects:share_link_delete' project.pk '00000000-0000-0000-0000-000000000000' %}",
   "csrfToken": "{{ csrf_token }}"
 }

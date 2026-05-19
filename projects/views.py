@@ -302,8 +302,205 @@ def video_delete(request, pk, gallery_pk, video_id):
         video.thumbnail.delete(save=False)
 
     video.delete()
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return JsonResponse({"success": True})
     messages.success(request, "Video deleted.")
     return redirect("projects:gallery_detail", pk=pk, gallery_pk=gallery_pk)
+
+
+@login_required
+@require_POST
+def video_rename(request, pk, gallery_pk, video_id):
+    """Update filename_original on a video. Owner only."""
+    project = get_object_or_404(Project, pk=pk, owner=request.user)
+    gallery = get_object_or_404(Gallery, pk=gallery_pk, project=project)
+    video = get_object_or_404(Video, pk=video_id, gallery=gallery)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    new_name = (data.get("name") or "").strip()
+    if not new_name:
+        return JsonResponse({"error": "Name is required."}, status=400)
+    if len(new_name) > 255:
+        return JsonResponse({"error": "Name is too long (max 255 chars)."}, status=400)
+
+    video.filename_original = new_name
+    video.save(update_fields=["filename_original"])
+    return JsonResponse({"success": True, "name": new_name})
+
+
+@login_required
+@require_POST
+def video_move(request, pk, gallery_pk, video_id):
+    """
+    Move a video to a different gallery (any project the user owns). The
+    physical file is relocated under the target project's media dir when
+    crossing projects; share links FK to the video, so they follow
+    automatically and remain valid.
+    """
+    project = get_object_or_404(Project, pk=pk, owner=request.user)
+    gallery = get_object_or_404(Gallery, pk=gallery_pk, project=project)
+    video = get_object_or_404(Video, pk=video_id, gallery=gallery)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    target_gallery_id = data.get("target_gallery_id")
+    if not target_gallery_id:
+        return JsonResponse({"error": "target_gallery_id is required."}, status=400)
+
+    try:
+        target_gallery = Gallery.objects.select_related("project").get(pk=target_gallery_id)
+    except (Gallery.DoesNotExist, ValueError):
+        return JsonResponse({"error": "Target gallery not found."}, status=404)
+
+    if target_gallery.project.owner != request.user:
+        return JsonResponse({"error": "You do not own the target project."}, status=403)
+
+    if str(target_gallery.id) == str(gallery.id):
+        return JsonResponse({"error": "Video is already in that gallery."}, status=400)
+
+    _relocate_video(video, target_gallery)
+
+    return JsonResponse({
+        "success": True,
+        "target_project_id": str(target_gallery.project_id),
+        "target_gallery_id": str(target_gallery.id),
+    })
+
+
+def _relocate_video(video, target_gallery):
+    """
+    Physically move *video*'s file (and thumbnail) to the target gallery's
+    project directory, then update the FK. Called by video_move and
+    video_bulk_move.
+
+    Comparisons that referenced the video stay attached to the OLD gallery,
+    which means the moved video disappears from the old gallery's ranking
+    history but stays correctly attributed in any leaderboard / Elo lookup
+    that walks Video.elo_rating directly.
+    """
+    src_path = video.file.path if video.file else None
+
+    if str(target_gallery.project_id) != str(video.gallery.project_id):
+        # Cross-project move: relocate the file on disk.
+        ext = os.path.splitext(video.file.name)[1].lstrip(".").lower() or "webm"
+        new_relative = f"videos/{target_gallery.project_id}/{video.id}.{ext}"
+        new_abs = os.path.join(settings.MEDIA_ROOT, new_relative)
+        os.makedirs(os.path.dirname(new_abs), exist_ok=True)
+        if src_path and os.path.isfile(src_path):
+            os.replace(src_path, new_abs)
+        video.file.name = new_relative
+
+        # Thumbnails live in MEDIA/thumbnails/ — no per-project nesting, so
+        # they don't need to move. They keep their FileField path unchanged.
+
+    video.gallery = target_gallery
+    # Skip the save() auto-rename: we've already set the path correctly.
+    video.save()
+
+
+@login_required
+@require_POST
+def video_bulk_move(request):
+    """Move many videos to one target gallery in a single request."""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    video_ids = data.get("video_ids") or []
+    target_gallery_id = data.get("target_gallery_id")
+    if not video_ids or not target_gallery_id:
+        return JsonResponse({"error": "video_ids and target_gallery_id required."}, status=400)
+    if len(video_ids) > 200:
+        return JsonResponse({"error": "Too many videos in one move."}, status=400)
+
+    try:
+        target_gallery = Gallery.objects.select_related("project").get(pk=target_gallery_id)
+    except (Gallery.DoesNotExist, ValueError):
+        return JsonResponse({"error": "Target gallery not found."}, status=404)
+    if target_gallery.project.owner != request.user:
+        return JsonResponse({"error": "You do not own the target project."}, status=403)
+
+    moved, skipped = 0, 0
+    for vid in video_ids:
+        try:
+            v = Video.objects.select_related("gallery__project").get(pk=vid)
+        except (Video.DoesNotExist, ValueError):
+            skipped += 1
+            continue
+        if v.gallery.project.owner != request.user:
+            skipped += 1
+            continue
+        if str(v.gallery_id) == str(target_gallery.id):
+            skipped += 1
+            continue
+        _relocate_video(v, target_gallery)
+        moved += 1
+
+    return JsonResponse({"success": True, "moved": moved, "skipped": skipped})
+
+
+@login_required
+@require_POST
+def video_bulk_delete(request):
+    """Delete many videos in a single request."""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    video_ids = data.get("video_ids") or []
+    if not video_ids:
+        return JsonResponse({"error": "video_ids required."}, status=400)
+    if len(video_ids) > 200:
+        return JsonResponse({"error": "Too many videos in one delete."}, status=400)
+
+    deleted = 0
+    for vid in video_ids:
+        try:
+            v = Video.objects.select_related("gallery__project").get(pk=vid)
+        except (Video.DoesNotExist, ValueError):
+            continue
+        if v.gallery.project.owner != request.user:
+            continue
+        if v.file:
+            v.file.delete(save=False)
+        if v.thumbnail:
+            v.thumbnail.delete(save=False)
+        v.delete()
+        deleted += 1
+
+    return JsonResponse({"success": True, "deleted": deleted})
+
+
+@login_required
+@require_GET
+def gallery_picker_list(request):
+    """Return all galleries the user owns, grouped by project. Used by the
+    Move-Videos picker dialog."""
+    galleries = (
+        Gallery.objects
+        .filter(project__owner=request.user)
+        .select_related("project")
+        .order_by("project__name", "name")
+    )
+    out = [
+        {
+            "gallery_id":   str(g.pk),
+            "gallery_name": g.name,
+            "project_id":   str(g.project_id),
+            "project_name": g.project.name,
+        }
+        for g in galleries
+    ]
+    return JsonResponse({"galleries": out})
 
 
 @login_required

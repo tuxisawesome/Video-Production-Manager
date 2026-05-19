@@ -11,6 +11,17 @@ const _csrfToken = _pageData.csrfToken || '';
 // Placeholder used in the delete URL template (token slot).
 const _PLACEHOLDER = '00000000-0000-0000-0000-000000000000';
 const _shareLinkDeleteBase = _pageData.shareLinkDeleteBaseUrl || '';
+const _renameVideoBase     = _pageData.renameVideoBaseUrl   || '';
+const _moveVideoBase       = _pageData.moveVideoBaseUrl     || '';
+const _bulkMoveUrl         = _pageData.bulkMoveUrl          || '';
+const _bulkDeleteUrl       = _pageData.bulkDeleteUrl        || '';
+const _galleryPickerUrl    = _pageData.galleryPickerUrl     || '';
+
+// Cached gallery list for the move dialog (loaded once per page).
+let _galleryPickerCache = null;
+// Multi-select state
+let _selectMode = false;
+const _selectedIds = new Set();
 
 function getCSRFToken() {
     return _csrfToken ||
@@ -643,6 +654,340 @@ if (deleteProjectDialog) {
 // Expose globals
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Rename / Move / Bulk / Multi-select / View toggle
+// ---------------------------------------------------------------------------
+
+// --- Inline rename inside the sidebar ---
+function startSidebarRename() {
+    if (!_currentCard) return;
+    const titleEl = document.getElementById('sidebar-title');
+    if (!titleEl) return;
+    const current = titleEl.textContent.trim();
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = current;
+    input.maxLength = 255;
+    input.className = 'admin-compact-input';
+    input.style.cssText = 'flex:1; min-width:0; font-size:16px;';
+    titleEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    let done = false;
+    const cancel = () => {
+        if (done) return; done = true;
+        const span = document.createElement('span');
+        span.className = 'title'; span.id = 'sidebar-title';
+        span.textContent = current;
+        input.replaceWith(span);
+    };
+    const commit = async () => {
+        if (done) return;
+        const newName = input.value.trim();
+        if (!newName || newName === current) { cancel(); return; }
+        done = true;
+        input.disabled = true;
+        const url = _renameVideoBase.replace(_PLACEHOLDER, _currentVideoId);
+        try {
+            const resp = await fetch(url, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCSRFToken(),
+                },
+                body: JSON.stringify({ name: newName }),
+            });
+            if (!resp.ok) {
+                alert(`Rename failed (${resp.status}).`);
+                input.disabled = false;
+                done = false;
+                return;
+            }
+            const data = await resp.json();
+            const finalName = data.name || newName;
+            // Restore the span
+            const span = document.createElement('span');
+            span.className = 'title'; span.id = 'sidebar-title';
+            span.textContent = finalName;
+            input.replaceWith(span);
+            // Update the card too
+            if (_currentCard) {
+                _currentCard.dataset.videoName = finalName;
+                const titleNode = _currentCard.querySelector('.video-title');
+                if (titleNode) titleNode.textContent = finalName;
+                const fname = document.getElementById('sidebar-filename');
+                if (fname) fname.textContent = finalName;
+            }
+        } catch (e) {
+            alert('Network error while renaming.');
+            input.disabled = false;
+            done = false;
+        }
+    };
+
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+    });
+}
+
+// --- View toggle (grid / list) ---
+function setViewMode(mode) {
+    const container = document.getElementById('videos-container');
+    if (!container) return;
+    if (mode === 'list') {
+        container.classList.remove('video-grid');
+        container.classList.add('video-list');
+    } else {
+        container.classList.remove('video-list');
+        container.classList.add('video-grid');
+        mode = 'grid';
+    }
+    const g = document.getElementById('view-grid-btn');
+    const l = document.getElementById('view-list-btn');
+    if (g) g.classList.toggle('active', mode === 'grid');
+    if (l) l.classList.toggle('active', mode === 'list');
+    try { localStorage.setItem('vpm.viewMode', mode); } catch (_) {}
+}
+
+(function _restoreViewMode() {
+    let mode = 'grid';
+    try { mode = localStorage.getItem('vpm.viewMode') || 'grid'; } catch (_) {}
+    // Wait for DOM ready if needed.
+    if (document.getElementById('videos-container')) setViewMode(mode);
+    else document.addEventListener('DOMContentLoaded', () => setViewMode(mode));
+})();
+
+// --- Multi-select ---
+function toggleSelectMode() {
+    _selectMode = !_selectMode;
+    document.body.classList.toggle('select-mode', _selectMode);
+    const label = document.getElementById('select-mode-label');
+    if (label) label.textContent = _selectMode ? 'Done' : 'Select';
+    if (!_selectMode) clearSelection();
+    _updateBulkBar();
+}
+
+function onSelectionChange(e) {
+    const id = e.target.dataset.videoId;
+    if (e.target.checked) _selectedIds.add(id);
+    else _selectedIds.delete(id);
+    _updateBulkBar();
+}
+
+function clearSelection() {
+    _selectedIds.clear();
+    document.querySelectorAll('.vid-select-cb').forEach((cb) => { cb.checked = false; });
+    _updateBulkBar();
+}
+
+function _updateBulkBar() {
+    const bar = document.getElementById('bulk-action-bar');
+    if (!bar) return;
+    const count = _selectedIds.size;
+    bar.style.display = (_selectMode && count > 0) ? 'flex' : 'none';
+    const countEl = document.getElementById('bulk-selected-count');
+    if (countEl) countEl.textContent = String(count);
+}
+
+function confirmBulkDelete() {
+    const dialog = document.getElementById('bulk-delete-dialog');
+    if (!dialog) return;
+    const countEl = document.getElementById('bulk-delete-count');
+    if (countEl) countEl.textContent = String(_selectedIds.size);
+    dialog.classList.add('open');
+}
+
+async function executeBulkDelete() {
+    const dialog = document.getElementById('bulk-delete-dialog');
+    if (!_bulkDeleteUrl || _selectedIds.size === 0) {
+        if (dialog) dialog.classList.remove('open');
+        return;
+    }
+    try {
+        const resp = await fetch(_bulkDeleteUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken(),
+            },
+            body: JSON.stringify({ video_ids: [..._selectedIds] }),
+        });
+        if (!resp.ok) {
+            alert(`Bulk delete failed (${resp.status}).`);
+            return;
+        }
+        // Remove deleted cards from DOM.
+        for (const id of _selectedIds) {
+            const card = document.querySelector(`.video-card[data-video-id="${id}"]`);
+            if (card) card.remove();
+        }
+        clearSelection();
+    } catch (e) {
+        alert('Network error during bulk delete.');
+    } finally {
+        if (dialog) dialog.classList.remove('open');
+    }
+}
+
+// --- Move dialog ---
+async function _loadGalleries() {
+    if (_galleryPickerCache) return _galleryPickerCache;
+    if (!_galleryPickerUrl) return [];
+    try {
+        const resp = await fetch(_galleryPickerUrl, {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' },
+        });
+        if (!resp.ok) return [];
+        const data = await resp.json();
+        _galleryPickerCache = data.galleries || [];
+        return _galleryPickerCache;
+    } catch (e) {
+        return [];
+    }
+}
+
+// Renders the gallery list into the move dialog. `mode` is "single" or "bulk".
+async function _renderMoveTargets(mode) {
+    const list = document.getElementById('move-targets');
+    if (!list) return;
+    list.innerHTML = '<span class="md-body-small text-on-surface-variant">Loading galleries…</span>';
+    const galleries = await _loadGalleries();
+    const filter = (document.getElementById('move-filter')?.value || '').toLowerCase();
+    const excludeGalleryId = (mode === 'single')
+        ? _currentGalleryPk
+        : null; // bulk: don't exclude — the API will skip per-video duplicates
+
+    const shown = galleries.filter((g) => {
+        if (excludeGalleryId && g.gallery_id === excludeGalleryId) return false;
+        if (!filter) return true;
+        return (g.project_name + ' / ' + g.gallery_name).toLowerCase().includes(filter);
+    });
+
+    if (!shown.length) {
+        list.innerHTML = '<span class="md-body-small text-on-surface-variant">No galleries match.</span>';
+        return;
+    }
+
+    list.innerHTML = shown.map((g) => `
+        <button type="button" class="md-button-text" data-gallery-id="${escapeHtml(g.gallery_id)}"
+                style="justify-content:flex-start; padding:10px 12px; text-align:left; gap:8px;">
+          <span class="material-symbols-outlined" style="font-size:18px; color:var(--md-sys-color-primary);">photo_library</span>
+          <span style="display:flex; flex-direction:column; align-items:flex-start; line-height:1.2;">
+            <span class="md-body-medium">${escapeHtml(g.gallery_name)}</span>
+            <span class="md-body-small text-on-surface-variant">${escapeHtml(g.project_name)}</span>
+          </span>
+        </button>
+    `).join('');
+
+    list.querySelectorAll('button[data-gallery-id]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const targetGalleryId = btn.dataset.galleryId;
+            if (mode === 'single') _moveCurrentVideo(targetGalleryId);
+            else _moveSelected(targetGalleryId);
+        });
+    });
+}
+
+// Open the move dialog for the video currently shown in the sidebar.
+function openMoveDialogForCurrentVideo() {
+    if (!_currentVideoId) return;
+    const dialog = document.getElementById('move-dialog');
+    if (!dialog) return;
+    const countEl = document.getElementById('move-dialog-count');
+    if (countEl) countEl.textContent = 'video';
+    const filterEl = document.getElementById('move-filter');
+    if (filterEl) {
+        filterEl.value = '';
+        filterEl.oninput = () => _renderMoveTargets('single');
+    }
+    dialog.classList.add('open');
+    _renderMoveTargets('single');
+}
+
+// Open the move dialog for the currently-selected videos (bulk mode).
+function openMoveDialog() {
+    if (_selectedIds.size === 0) return;
+    const dialog = document.getElementById('move-dialog');
+    if (!dialog) return;
+    const countEl = document.getElementById('move-dialog-count');
+    if (countEl) countEl.textContent = `${_selectedIds.size} videos`;
+    const filterEl = document.getElementById('move-filter');
+    if (filterEl) {
+        filterEl.value = '';
+        filterEl.oninput = () => _renderMoveTargets('bulk');
+    }
+    dialog.classList.add('open');
+    _renderMoveTargets('bulk');
+}
+
+async function _moveCurrentVideo(targetGalleryId) {
+    if (!_currentVideoId || !_moveVideoBase) return;
+    const url = _moveVideoBase.replace(_PLACEHOLDER, _currentVideoId);
+    try {
+        const resp = await fetch(url, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken(),
+            },
+            body: JSON.stringify({ target_gallery_id: targetGalleryId }),
+        });
+        if (!resp.ok) {
+            let msg = `Move failed (${resp.status}).`;
+            try { const j = await resp.json(); msg = j.error || msg; } catch (_) {}
+            alert(msg);
+            return;
+        }
+        // Remove the card from the current page and close everything.
+        if (_currentCard) _currentCard.remove();
+        document.getElementById('move-dialog')?.classList.remove('open');
+        closeSidebar();
+    } catch (e) {
+        alert('Network error during move.');
+    }
+}
+
+async function _moveSelected(targetGalleryId) {
+    if (_selectedIds.size === 0 || !_bulkMoveUrl) return;
+    const ids = [..._selectedIds];
+    try {
+        const resp = await fetch(_bulkMoveUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken(),
+            },
+            body: JSON.stringify({ video_ids: ids, target_gallery_id: targetGalleryId }),
+        });
+        if (!resp.ok) {
+            let msg = `Bulk move failed (${resp.status}).`;
+            try { const j = await resp.json(); msg = j.error || msg; } catch (_) {}
+            alert(msg);
+            return;
+        }
+        for (const id of ids) {
+            const card = document.querySelector(`.video-card[data-video-id="${id}"]`);
+            if (card) card.remove();
+        }
+        clearSelection();
+        document.getElementById('move-dialog')?.classList.remove('open');
+    } catch (e) {
+        alert('Network error during bulk move.');
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Expose globals
+// ---------------------------------------------------------------------------
+
 window.openSidebar           = openSidebar;
 window.closeSidebar          = closeSidebar;
 window.confirmDeleteVideo    = confirmDeleteVideo;
@@ -654,3 +999,12 @@ window.useVideoTimestamp     = useVideoTimestamp;
 window.showCopied            = showCopied;
 window.createVideoShareLink  = createVideoShareLink;
 window.deleteVideoShareLink  = deleteVideoShareLink;
+window.startSidebarRename    = startSidebarRename;
+window.openMoveDialog        = openMoveDialog;
+window.openMoveDialogForCurrentVideo = openMoveDialogForCurrentVideo;
+window.setViewMode           = setViewMode;
+window.toggleSelectMode      = toggleSelectMode;
+window.onSelectionChange     = onSelectionChange;
+window.clearSelection        = clearSelection;
+window.confirmBulkDelete     = confirmBulkDelete;
+window.executeBulkDelete     = executeBulkDelete;

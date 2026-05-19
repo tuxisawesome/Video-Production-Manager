@@ -308,9 +308,23 @@ function _appendVideoShareLink(sl) {
     container.appendChild(div);
 }
 
+function _vslShowError(msg) {
+    const c = document.getElementById('video-share-links');
+    if (c) {
+        const span = document.createElement('span');
+        span.className = 'md-body-small';
+        span.style.color = 'var(--md-sys-color-error)';
+        span.textContent = msg;
+        c.appendChild(span);
+    }
+    console.error('[Share]', msg);
+}
+
 async function createVideoShareLink() {
+    console.log('[Share] createVideoShareLink called, url=', _videoShareCreateUrl);
+
     if (!_videoShareCreateUrl) {
-        alert('Cannot create link: no URL available. Try refreshing the page.');
+        _vslShowError('No URL — try refreshing the page.');
         return;
     }
     const btn = document.querySelector('#video-sidebar button[onclick="createVideoShareLink();"]');
@@ -318,6 +332,8 @@ async function createVideoShareLink() {
 
     const accessType = document.querySelector('input[name="vsl_access"]:checked')?.value || 'view';
     const password   = (document.getElementById('vsl-password')?.value || '').trim();
+
+    console.log('[Share] POSTing to', _videoShareCreateUrl, '— access_type:', accessType);
 
     try {
         const resp = await fetch(_videoShareCreateUrl, {
@@ -331,16 +347,22 @@ async function createVideoShareLink() {
             body: JSON.stringify({ access_type: accessType, password }),
         });
 
+        console.log('[Share] response status:', resp.status);
+
         if (!resp.ok) {
             let msg = `Server error ${resp.status}.`;
             try { const e = await resp.json(); msg = e.error || msg; } catch {}
-            alert(msg);
+            _vslShowError(msg);
             return;
         }
 
         let data;
-        try { data = await resp.json(); } catch {
-            alert('Unexpected response from server. Check server logs.');
+        try {
+            data = await resp.json();
+            console.log('[Share] response data:', data);
+        } catch (e) {
+            _vslShowError('Unexpected server response (not JSON).');
+            console.error('[Share] JSON parse error', e);
             return;
         }
 
@@ -350,8 +372,8 @@ async function createVideoShareLink() {
         // Append the new link directly — no re-fetch needed
         _appendVideoShareLink(data);
     } catch (e) {
-        alert('Network error creating share link. Check console.');
-        console.error('[Share] create error', e);
+        _vslShowError('Network error — check the browser console.');
+        console.error('[Share] fetch error', e);
     } finally {
         if (btn) btn.disabled = false;
     }

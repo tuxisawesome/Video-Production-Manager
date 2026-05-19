@@ -116,6 +116,10 @@ function openSidebar(cardEl) {
         };
     }
 
+    // Wire up Generate share link button (owners only)
+    const genBtn = document.getElementById('vsl-generate-btn');
+    if (genBtn) genBtn.onclick = createVideoShareLink;
+
     // Clear comment input
     if (commentText) commentText.value = '';
     if (commentTs)   commentTs.value   = '';
@@ -327,7 +331,7 @@ async function createVideoShareLink() {
         _vslShowError('No URL — try refreshing the page.');
         return;
     }
-    const btn = document.querySelector('#video-sidebar button[onclick="createVideoShareLink();"]');
+    const btn = document.getElementById('vsl-generate-btn');
     if (btn) btn.disabled = true;
 
     const accessType = document.querySelector('input[name="vsl_access"]:checked')?.value || 'view';

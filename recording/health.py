@@ -51,12 +51,60 @@ def probe(file_path: str) -> Optional[dict]:
         return None
 
 
+def _duration_from_last_packet(file_path: str, max_seconds: int = 12) -> float:
+    """
+    Some MediaRecorder WebMs leave the EBML duration field unset. ffprobe then
+    reports duration=0 even though the file plays fine. Recover the real
+    duration by reading the timestamp of the last video packet.
+
+    Capped at *max_seconds* of wall-clock so a giant file doesn't block the
+    response. Returns 0.0 on failure.
+    """
+    if not _ffprobe_available():
+        return 0.0
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "packet=pts_time",
+                "-of", "csv=p=0",
+                file_path,
+            ],
+            capture_output=True, text=True, timeout=max_seconds,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return 0.0
+    if result.returncode != 0 or not result.stdout.strip():
+        return 0.0
+    last = 0.0
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            v = float(line)
+        except ValueError:
+            continue
+        if v > last:
+            last = v
+    return last
+
+
 def classify_file(file_path: str, expect_audio: bool = True) -> Tuple[str, float, str]:
     """
     Inspect *file_path* with ffprobe and return (health_status, duration_seconds, detail).
 
+    Heuristics for WebM/MP4 from MediaRecorder:
+      - "empty" means: no streams at all, OR file is suspiciously tiny AND no
+        video stream is present. We do NOT mark a file empty just because the
+        container duration is 0 — MediaRecorder WebMs routinely lack that
+        field even when they hold a full recording.
+      - When the container duration is missing, we derive a real duration
+        from the last video packet's PTS.
+
     health_status is one of the Video.HEALTH_* string constants.
-    duration_seconds is 0.0 when unknown.
+    duration_seconds is 0.0 only when we genuinely couldn't determine it.
     detail is a short human-readable note suitable for storing on the row.
     """
     # Import here to avoid circular import with projects.models.
@@ -68,7 +116,8 @@ def classify_file(file_path: str, expect_audio: bool = True) -> Tuple[str, float
         return Video.HEALTH_CORRUPTED, 0.0, "file missing on disk"
 
     size = os.path.getsize(file_path)
-    if size < 1024:
+    # 4 KB is too small to contain any real audio or video data.
+    if size < 4096:
         return Video.HEALTH_EMPTY, 0.0, f"file is only {size} bytes"
 
     data = probe(file_path)
@@ -79,37 +128,48 @@ def classify_file(file_path: str, expect_audio: bool = True) -> Tuple[str, float
     video_streams = [s for s in streams if s.get("codec_type") == "video"]
     audio_streams = [s for s in streams if s.get("codec_type") == "audio"]
 
-    try:
-        duration = float(data.get("format", {}).get("duration", "0") or 0)
-    except (TypeError, ValueError):
-        duration = 0.0
-
     if not streams:
-        return Video.HEALTH_EMPTY, duration, "no streams detected"
+        return Video.HEALTH_EMPTY, 0.0, "no streams detected"
 
     if not video_streams and audio_streams:
         return (
             Video.HEALTH_AUDIO_ONLY,
-            duration,
+            _safe_float(data.get("format", {}).get("duration")),
             f"audio-only ({audio_streams[0].get('codec_name', '?')}), no video track",
         )
 
     if not video_streams:
-        return Video.HEALTH_EMPTY, duration, "no video or audio stream"
+        return Video.HEALTH_EMPTY, 0.0, "no video or audio stream"
 
-    if duration < 0.5:
+    # We *have* a video stream. Now try increasingly expensive duration sources.
+    duration = _safe_float(data.get("format", {}).get("duration"))
+    if duration <= 0:
+        duration = _safe_float(video_streams[0].get("duration"))
+    if duration <= 0:
+        # MediaRecorder-style WebM without EBML duration: scan packets.
+        duration = _duration_from_last_packet(file_path)
+
+    # Only flag as empty if both the duration AND the data on disk look broken.
+    # Files <50 KB with no decodable duration almost certainly contain nothing.
+    if duration <= 0 and size < 50 * 1024:
         return (
             Video.HEALTH_EMPTY,
-            duration,
-            f"duration is only {duration:.2f}s",
+            0.0,
+            f"no decodable frames ({size} bytes)",
         )
 
     if expect_audio and not audio_streams:
-        # Video-only when audio was supposed to be enabled — flag as a warning
-        # but treat as OK (still playable).
+        # Video-only when audio was supposed to be enabled — still playable.
         return Video.HEALTH_OK, duration, "no audio stream (audio was expected)"
 
     return Video.HEALTH_OK, duration, ""
+
+
+def _safe_float(v) -> float:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def update_video_health(video) -> str:

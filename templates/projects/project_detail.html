@@ -52,34 +52,6 @@
     </div>
   </div>
 
-  <!-- Active project share links -->
-  {% if is_owner and share_links %}
-  <div class="md-card-elevated" style="padding:16px 20px; margin-bottom:20px;">
-    <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
-      <span class="material-symbols-outlined" style="font-size:20px;">link</span>
-      <span class="md-title-medium">Active Share Links</span>
-    </div>
-    <div style="display:flex; flex-direction:column; gap:10px;">
-      {% for sl in share_links %}
-      <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-        <span class="md-chip" style="background:var(--md-sys-color-secondary-container); color:var(--md-sys-color-on-secondary-container);">
-          {{ sl.get_access_type_display }}{% if sl.has_password %} 🔒{% endif %}
-        </span>
-        <input type="text" readonly value="{{ request.scheme }}://{{ request.get_host }}{% url 'projects:share_gate' sl.token %}"
-               class="admin-compact-input" style="flex:1; min-width:180px; font-size:12px; font-family:monospace; cursor:pointer;"
-               onclick="this.select(); document.execCommand('copy');" title="Click to copy">
-        <form method="post" action="{% url 'projects:share_link_delete' project.pk sl.token %}" style="display:inline;">
-          {% csrf_token %}
-          <button type="submit" class="md-icon-button" title="Delete link" style="color:var(--md-sys-color-error);">
-            <span class="material-symbols-outlined">delete</span>
-          </button>
-        </form>
-      </div>
-      {% endfor %}
-    </div>
-  </div>
-  {% endif %}
-
   <!-- Gallery Grid -->
   {% if galleries %}
     <div class="grid-container">
@@ -194,7 +166,7 @@
       <span class="material-symbols-outlined">group</span>
       Share Project
     </h2>
-    <div class="md-dialog-content" style="padding:0 24px 8px;">
+    <div class="md-dialog-content" style="padding:0 24px 8px; max-height:75vh; overflow-y:auto;">
 
       <!-- Current shares -->
       {% if shares %}
@@ -247,8 +219,37 @@
         </button>
       </form>
 
-      <!-- Public share link -->
+      <!-- Active project share links -->
       <hr class="md-divider" style="margin:20px 0 12px;">
+      <p class="md-label-medium text-on-surface-variant" style="margin-bottom:10px;">Active share links</p>
+      {% if share_links %}
+      <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:16px;">
+        {% for sl in share_links %}
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:nowrap;">
+          <span class="md-chip" style="background:var(--md-sys-color-secondary-container); color:var(--md-sys-color-on-secondary-container); font-size:12px; padding:2px 8px; border-radius:8px; white-space:nowrap; flex-shrink:0;">
+            {{ sl.get_access_type_display }}{% if sl.has_password %}
+              <span class="material-symbols-outlined" style="font-size:14px; vertical-align:-2px; margin-left:2px;">lock</span>
+            {% endif %}
+          </span>
+          <input type="text" readonly value="{{ request.scheme }}://{{ request.get_host }}{% url 'projects:share_gate' sl.token %}"
+                 style="flex:1; min-width:0; font-size:11px; font-family:monospace; padding:4px 8px;
+                        border:1px solid var(--md-sys-color-outline-variant); border-radius:4px;
+                        background:var(--md-sys-color-surface-container); color:var(--md-sys-color-on-surface); cursor:pointer;"
+                 onclick="this.select(); document.execCommand('copy');" title="Click to copy">
+          <form method="post" action="{% url 'projects:share_link_delete' project.pk sl.token %}" style="display:inline; flex-shrink:0;">
+            {% csrf_token %}
+            <button type="submit" class="md-icon-button" title="Delete link" style="color:var(--md-sys-color-error);">
+              <span class="material-symbols-outlined" style="font-size:18px;">delete</span>
+            </button>
+          </form>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="md-body-small text-on-surface-variant" style="margin-bottom:16px;">No share links yet.</p>
+      {% endif %}
+
+      <!-- Public share link -->
       <p class="md-label-medium text-on-surface-variant" style="margin-bottom:10px;">Create a public link</p>
       <form method="post" action="{% url 'projects:share_link_create' project.pk %}" style="display:flex; flex-direction:column; gap:10px;">
         {% csrf_token %}

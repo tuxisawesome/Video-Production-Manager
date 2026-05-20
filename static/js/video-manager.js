@@ -13,6 +13,7 @@ const _PLACEHOLDER = '00000000-0000-0000-0000-000000000000';
 const _shareLinkDeleteBase = _pageData.shareLinkDeleteBaseUrl || '';
 const _renameVideoBase     = _pageData.renameVideoBaseUrl   || '';
 const _moveVideoBase       = _pageData.moveVideoBaseUrl     || '';
+const _videoShareCreateBase = _pageData.videoShareCreateBaseUrl || '';
 const _bulkMoveUrl         = _pageData.bulkMoveUrl          || '';
 const _bulkDeleteUrl       = _pageData.bulkDeleteUrl        || '';
 const _galleryPickerUrl    = _pageData.galleryPickerUrl     || '';
@@ -64,7 +65,6 @@ let _commentCreateUrl    = '';
 let _currentProjectPk    = '';
 let _currentGalleryPk    = '';
 let _currentVideoId      = '';
-let _videoShareCreateUrl = '';  // per-video, set from card data attribute
 
 // ---------------------------------------------------------------------------
 // Utility: format bytes
@@ -115,7 +115,6 @@ function openSidebar(cardEl) {
     _currentProjectPk    = cardEl.dataset.projectPk || '';
     _currentGalleryPk    = cardEl.dataset.galleryPk || '';
     _currentVideoId      = videoId;
-    _videoShareCreateUrl = cardEl.dataset.shareCreateUrl || '';
 
     // Set video player source
     sidebarPlayer.src = videoUrl;
@@ -161,9 +160,8 @@ function openSidebar(cardEl) {
         };
     }
 
-    // Wire up Generate share link button (owners only)
-    const genBtn = document.getElementById('vsl-generate-btn');
-    if (genBtn) genBtn.onclick = createVideoShareLink;
+    // (Per-video Generate button now lives in the Share dialog and is wired
+    // up at script load via the document-level capture listener below.)
 
     // Clear comment input
     if (commentText) commentText.value = '';
@@ -172,23 +170,7 @@ function openSidebar(cardEl) {
     // Load comments
     if (_commentListUrl) loadComments();
 
-    // Render video share links synchronously from embedded JSON in the card
-    if (_isOwner) {
-        const slDataEl = cardEl.querySelector('.vsl-data');
-        const vslContainer = document.getElementById('video-share-links');
-        if (vslContainer) {
-            if (slDataEl) {
-                try {
-                    renderVideoShareLinks(JSON.parse(slDataEl.textContent));
-                } catch (e) {
-                    renderVideoShareLinks([]);
-                    console.error('[Share] JSON parse error', e);
-                }
-            } else {
-                renderVideoShareLinks([]);
-            }
-        }
-    }
+    // Per-video sharing UI now lives in the Share dialog (see openShareDialog).
 
     // Show sidebar
     sidebar.classList.add('open');
@@ -306,9 +288,8 @@ function useVideoTimestamp() {
 // Video share links (owner sidebar)
 // ---------------------------------------------------------------------------
 
-// Server's get_access_type_display() can return long phrases like
-// "Commentator + Download" that push the URL field off the narrow sidebar.
-// Collapse to a single word chip.
+// Server's get_access_type_display() returns long phrases like
+// "Commentator + Download". Collapse to a single word chip.
 function _shortRole(displayText) {
     const t = (displayText || '').toLowerCase();
     if (t.includes('comment')) return 'Commentator';
@@ -316,78 +297,16 @@ function _shortRole(displayText) {
     return 'View';
 }
 
-function _shareRowHtml(sl) {
+// Render a single per-video share row in the consolidated dialog list.
+function _buildVslRow(sl, videoName) {
     const role = _shortRole(sl.access_type_display);
     const lock = sl.has_password
         ? '<span class="material-symbols-outlined" style="font-size:14px; vertical-align:-2px; margin-left:2px;">lock</span>'
         : '';
-    return `
-      <span class="md-chip" style="background:var(--md-sys-color-secondary-container); color:var(--md-sys-color-on-secondary-container); font-size:12px; padding:2px 8px; border-radius:8px; white-space:nowrap; flex-shrink:0;">
-        ${escapeHtml(role)}${lock}
-      </span>
-      <input type="text" readonly value="${escapeHtml(sl.url)}"
-             style="flex:1; min-width:0; font-size:11px; font-family:monospace; padding:4px 8px;
-                    border:1px solid var(--md-sys-color-outline-variant); border-radius:4px;
-                    background:var(--md-sys-color-surface-container); color:var(--md-sys-color-on-surface);
-                    cursor:pointer;"
-             onclick="this.select(); document.execCommand('copy');" title="Click to copy">
-      <button class="md-icon-button" style="color:var(--md-sys-color-error); flex-shrink:0;"
-              onclick="deleteVideoShareLink('${escapeHtml(sl.token)}')" title="Delete">
-        <span class="material-symbols-outlined" style="font-size:18px;">delete</span>
-      </button>`;
-}
-
-function renderVideoShareLinks(links) {
-    const container = document.getElementById('video-share-links');
-    if (!container) return;
-    if (!links.length) {
-        container.innerHTML = '<span class="md-body-small text-on-surface-variant vsl-empty">No share links yet.</span>';
-        return;
-    }
-    container.innerHTML = links.map(sl => `
-        <div data-token="${escapeHtml(sl.token)}" style="display:flex; align-items:center; gap:8px; flex-wrap:nowrap;">
-          ${_shareRowHtml(sl)}
-        </div>`).join('');
-}
-
-function _appendVideoShareLink(sl) {
-    const container = document.getElementById('video-share-links');
-    if (!container) return;
-    const empty = container.querySelector('.vsl-empty');
-    if (empty) empty.remove();
-    const div = document.createElement('div');
-    div.setAttribute('data-token', sl.token);
-    div.style.cssText = 'display:flex; align-items:center; gap:8px; flex-wrap:nowrap;';
-    div.innerHTML = _shareRowHtml(sl);
-    container.appendChild(div);
-    // Persist the new link into the card's embedded JSON so it survives
-    // closing/reopening the sidebar.
-    _updateCardShareLinks(arr => [...arr, {
-        token: sl.token,
-        access_type_display: sl.access_type_display,
-        has_password: !!sl.has_password,
-        url: sl.url,
-        delete_url: sl.delete_url || '',
-    }]);
-    // Mirror the new link into the gallery-level "Video Share Links" table.
-    const videoName = _currentCard ? (_currentCard.dataset.videoName || '') : '';
-    _appendGalleryShareRow(sl, videoName);
-}
-
-// Build a row matching the server-rendered #gallery-share-tbody markup and
-// keep the summary count + empty-state in sync.
-function _appendGalleryShareRow(sl, videoName) {
-    const tbody = document.getElementById('gallery-share-tbody');
-    if (!tbody) return;
-    const role = _shortRole(sl.access_type_display);
-    const lockHtml = sl.has_password
-        ? '<span class="material-symbols-outlined" style="font-size:14px; vertical-align:-2px; margin-left:2px;">lock</span>'
-        : '';
-
     const row = document.createElement('div');
     row.setAttribute('data-token', sl.token);
     row.style.cssText = 'display:flex; align-items:center; gap:8px; flex-wrap:nowrap; ' +
-                        'padding:8px 4px; border-bottom:1px solid var(--md-sys-color-outline-variant);';
+                        'padding:6px 0; border-bottom:1px solid var(--md-sys-color-outline-variant);';
     row.innerHTML = `
       <span class="md-body-small" title="${escapeHtml(videoName)}"
             style="flex:0 0 28%; min-width:0; overflow:hidden;
@@ -398,7 +317,7 @@ function _appendGalleryShareRow(sl, videoName) {
                                    color:var(--md-sys-color-on-secondary-container);
                                    font-size:12px; padding:2px 8px; border-radius:8px;
                                    white-space:nowrap; flex-shrink:0;">
-        ${escapeHtml(role)}${lockHtml}
+        ${escapeHtml(role)}${lock}
       </span>
       <input type="text" readonly value="${escapeHtml(sl.url)}"
              style="flex:1; min-width:0; font-size:11px; font-family:monospace; padding:4px 8px;
@@ -410,40 +329,28 @@ function _appendGalleryShareRow(sl, videoName) {
               onclick="deleteVideoShareLink('${escapeHtml(sl.token)}')" title="Delete link">
         <span class="material-symbols-outlined" style="font-size:18px;">delete</span>
       </button>`;
-    tbody.appendChild(row);
-
-    // Reveal the table container and hide the empty-state message.
-    const tableWrap = document.getElementById('gallery-share-table');
-    if (tableWrap) tableWrap.style.display = '';
-    const emptyEl = document.getElementById('gallery-share-empty');
-    if (emptyEl) emptyEl.style.display = 'none';
-
-    _refreshGalleryShareCount();
+    return row;
 }
 
-// Recompute the "N link(s)" label in the <summary> tag from current DOM.
-function _refreshGalleryShareCount() {
-    const tbody = document.getElementById('gallery-share-tbody');
-    if (!tbody) return;
-    const n = tbody.querySelectorAll('[data-token]').length;
-    const countEl = document.getElementById('gallery-share-count');
-    if (countEl) countEl.textContent = `${n} link${n === 1 ? '' : 's'}`;
+function _appendVideoShareLink(sl, videoName) {
+    const list = document.getElementById('vsl-list');
+    if (!list) return;
+    const emptyEl = document.getElementById('vsl-empty');
+    if (emptyEl) emptyEl.remove();
+    list.appendChild(_buildVslRow(sl, videoName));
+    _refreshVslCount();
 }
 
-// Keep the embedded JSON inside the current card in sync with whatever we
-// just rendered. Otherwise reopening the sidebar re-parses stale data and
-// resurrects deleted links / loses freshly-created ones.
-function _updateCardShareLinks(transform) {
-    if (!_currentCard) return;
-    const slEl = _currentCard.querySelector('.vsl-data');
-    if (!slEl) return;
-    let arr = [];
-    try { arr = JSON.parse(slEl.textContent || '[]'); } catch (_) {}
-    slEl.textContent = JSON.stringify(transform(arr));
+function _refreshVslCount() {
+    const list = document.getElementById('vsl-list');
+    if (!list) return;
+    const n = list.querySelectorAll('[data-token]').length;
+    const countEl = document.getElementById('vsl-count');
+    if (countEl) countEl.textContent = `(${n})`;
 }
 
 function _vslShowError(msg) {
-    const c = document.getElementById('video-share-links');
+    const c = document.getElementById('vsl-list');
     if (c) {
         const span = document.createElement('span');
         span.className = 'md-body-small';
@@ -455,18 +362,27 @@ function _vslShowError(msg) {
 }
 
 async function createVideoShareLink() {
-    if (!_videoShareCreateUrl) {
+    if (!_videoShareCreateBase) {
         _vslShowError('No URL — try refreshing the page.');
         return;
     }
+    const selectEl = document.getElementById('vsl-video-select');
+    const videoId = selectEl ? selectEl.value : '';
+    if (!videoId) {
+        _vslShowError('Pick a video first.');
+        return;
+    }
+
     const btn = document.getElementById('vsl-generate-btn');
     if (btn) btn.disabled = true;
 
     const accessType = document.querySelector('input[name="vsl_access"]:checked')?.value || 'view';
     const password   = (document.getElementById('vsl-password')?.value || '').trim();
+    const videoName  = selectEl.options[selectEl.selectedIndex]?.text || '';
+    const url = _videoShareCreateBase.replace(_PLACEHOLDER, videoId);
 
     try {
-        const resp = await fetch(_videoShareCreateUrl, {
+        const resp = await fetch(url, {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
@@ -496,7 +412,7 @@ async function createVideoShareLink() {
         const pw = document.getElementById('vsl-password');
         if (pw) pw.value = '';
 
-        _appendVideoShareLink(data);
+        _appendVideoShareLink(data, videoName);
     } catch (e) {
         _vslShowError('Network error — check the browser console.');
         console.error('[Share] fetch error', e);
@@ -518,29 +434,20 @@ async function deleteVideoShareLink(token) {
             },
         });
         if (resp.ok) {
-            // Remove the row directly from the DOM
-            const container = document.getElementById('video-share-links');
-            if (container) {
-                const row = container.querySelector(`[data-token="${token}"]`);
+            // Drop the row from the consolidated per-video list.
+            const list = document.getElementById('vsl-list');
+            if (list) {
+                const row = list.querySelector(`[data-token="${token}"]`);
                 if (row) row.remove();
-                if (!container.querySelector('[data-token]')) {
-                    container.innerHTML = '<span class="md-body-small text-on-surface-variant vsl-empty">No share links yet.</span>';
+                if (!list.querySelector('[data-token]')) {
+                    const empty = document.createElement('span');
+                    empty.id = 'vsl-empty';
+                    empty.className = 'md-body-small text-on-surface-variant';
+                    empty.textContent = 'No per-video links yet.';
+                    list.appendChild(empty);
                 }
             }
-            // Drop the entry from the card's embedded JSON so the next sidebar
-            // open doesn't resurrect the deleted link.
-            _updateCardShareLinks(arr => arr.filter(x => x.token !== token));
-            // Also drop any gallery-level row showing the same link.
-            const galleryRow = document.querySelector(`#gallery-share-table [data-token="${token}"]`);
-            if (galleryRow) galleryRow.remove();
-            const tbody = document.getElementById('gallery-share-tbody');
-            if (tbody && !tbody.children.length) {
-                const empty = document.getElementById('gallery-share-empty');
-                if (empty) empty.style.display = '';
-                const tableWrap = document.getElementById('gallery-share-table');
-                if (tableWrap) tableWrap.style.display = 'none';
-            }
-            _refreshGalleryShareCount();
+            _refreshVslCount();
         } else {
             alert(`Failed to delete link (${resp.status}).`);
         }
@@ -657,6 +564,23 @@ if (deleteProjectDialog) {
 // ---------------------------------------------------------------------------
 // Rename / Move / Bulk / Multi-select / View toggle
 // ---------------------------------------------------------------------------
+
+// Open the gallery Share dialog with the current video pre-selected in
+// the per-video create form, and scroll the form into view.
+function openShareDialogForCurrentVideo() {
+    const dialog = document.getElementById('share-dialog');
+    if (!dialog) return;
+    dialog.classList.add('open');
+    const select = document.getElementById('vsl-video-select');
+    if (select && _currentVideoId) {
+        select.value = _currentVideoId;
+    }
+    // Scroll the per-video section into view inside the dialog content.
+    const target = document.getElementById('vsl-list');
+    if (target && target.scrollIntoView) {
+        setTimeout(() => target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+    }
+}
 
 // --- Inline rename inside the sidebar ---
 function startSidebarRename() {
@@ -1002,6 +926,7 @@ window.deleteVideoShareLink  = deleteVideoShareLink;
 window.startSidebarRename    = startSidebarRename;
 window.openMoveDialog        = openMoveDialog;
 window.openMoveDialogForCurrentVideo = openMoveDialogForCurrentVideo;
+window.openShareDialogForCurrentVideo = openShareDialogForCurrentVideo;
 window.setViewMode           = setViewMode;
 window.toggleSelectMode      = toggleSelectMode;
 window.onSelectionChange     = onSelectionChange;

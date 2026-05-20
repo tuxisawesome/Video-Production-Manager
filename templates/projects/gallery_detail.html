@@ -159,91 +159,8 @@
   </form>
   {% endif %}
 
-  <!-- Share Links banner (owner only) -->
-  {% if is_owner and share_links %}
-  <div class="md-card-elevated" style="padding:16px 20px; margin-bottom:20px;">
-    <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
-      <span class="material-symbols-outlined" style="font-size:20px;">link</span>
-      <span class="md-title-medium">Active Share Links</span>
-    </div>
-    <div style="display:flex; flex-direction:column; gap:10px;">
-      {% for sl in share_links %}
-      <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-        <span class="md-chip" style="background:var(--md-sys-color-secondary-container); color:var(--md-sys-color-on-secondary-container);">
-          {{ sl.get_access_type_display }}{% if sl.has_password %} (password protected){% endif %}
-        </span>
-        <input type="text" readonly value="{{ request.scheme }}://{{ request.get_host }}{% url 'projects:share_gate' sl.token %}"
-               class="admin-compact-input" style="width:320px; font-size:12px; font-family:monospace;"
-               onclick="this.select(); document.execCommand('copy');">
-        <form method="post" action="{% url 'projects:share_link_delete' project.pk sl.token %}" style="display:inline;">
-          {% csrf_token %}
-          <button type="submit" class="md-icon-button" title="Delete link" style="color:var(--md-sys-color-error);">
-            <span class="material-symbols-outlined">delete</span>
-          </button>
-        </form>
-      </div>
-      {% endfor %}
-    </div>
-  </div>
-  {% endif %}
+  {# All share links and per-video share UI now live inside the Share dialog. #}
 
-  <!-- All video-level share links (owner only) -->
-  {% if is_owner %}
-  <div class="md-card-elevated" style="padding:16px 20px; margin-bottom:20px;">
-    <details {% if video_share_rows %}open{% endif %}>
-      <summary style="cursor:pointer; display:flex; align-items:center; gap:8px; user-select:none;">
-        <span class="material-symbols-outlined" style="font-size:20px;">videocam</span>
-        <span class="md-title-medium">Video Share Links</span>
-        <span id="gallery-share-count" class="md-body-small text-on-surface-variant" style="margin-left:auto;">
-          {{ video_share_rows|length }} link{{ video_share_rows|length|pluralize }}
-        </span>
-      </summary>
-      <div style="margin-top:12px;">
-        <span id="gallery-share-empty" class="md-body-small text-on-surface-variant"
-              style="{% if video_share_rows %}display:none;{% endif %}">
-          No per-video share links yet. Open any video in the sidebar to create one.
-        </span>
-        <div id="gallery-share-table" style="{% if not video_share_rows %}display:none;{% endif %}">
-          <div id="gallery-share-tbody" style="display:flex; flex-direction:column; gap:8px;">
-            {% for row in video_share_rows %}
-            <div data-token="{{ row.link.token }}"
-                 style="display:flex; align-items:center; gap:8px; flex-wrap:nowrap;
-                        padding:8px 4px; border-bottom:1px solid var(--md-sys-color-outline-variant);">
-              <span class="md-body-small" style="flex:0 0 28%; min-width:0; overflow:hidden;
-                                                  text-overflow:ellipsis; white-space:nowrap;"
-                    title="{{ row.video.filename_original|default:row.video.pk }}">
-                {{ row.video.filename_original|default:row.video.pk }}
-              </span>
-              <span class="md-chip" style="background:var(--md-sys-color-secondary-container);
-                                           color:var(--md-sys-color-on-secondary-container);
-                                           font-size:12px; padding:2px 8px; border-radius:8px;
-                                           white-space:nowrap; flex-shrink:0;">
-                {% if row.link.access_type == 'commentator' %}Commentator
-                {% elif row.link.access_type == 'rank' %}Rank
-                {% else %}View{% endif %}
-                {% if row.link.has_password %}
-                <span class="material-symbols-outlined" style="font-size:14px; vertical-align:-2px; margin-left:2px;">lock</span>
-                {% endif %}
-              </span>
-              <input type="text" readonly
-                     value="{{ request.scheme }}://{{ request.get_host }}{% url 'projects:share_gate' row.link.token %}"
-                     style="flex:1; min-width:0; font-size:11px; font-family:monospace; padding:4px 8px;
-                            border:1px solid var(--md-sys-color-outline-variant); border-radius:4px;
-                            background:var(--md-sys-color-surface-container);
-                            color:var(--md-sys-color-on-surface); cursor:pointer;"
-                     onclick="this.select(); document.execCommand('copy');" title="Click to copy">
-              <button class="md-icon-button" style="color:var(--md-sys-color-error); flex-shrink:0;"
-                      onclick="deleteVideoShareLink('{{ row.link.token }}')" title="Delete link">
-                <span class="material-symbols-outlined" style="font-size:18px;">delete</span>
-              </button>
-            </div>
-            {% endfor %}
-          </div>
-        </div>
-      </div>
-    </details>
-  </div>
-  {% endif %}
 
   {% if is_owner %}
   <!-- Bulk action bar (visible in select mode with items selected) -->
@@ -283,9 +200,6 @@
              data-comment-delete-base="{% url 'projects:comment_list' project.pk gallery.pk video.pk %}"
              data-project-pk="{{ project.pk }}"
              data-gallery-pk="{{ gallery.pk }}"
-             {% if is_owner %}
-             data-share-create-url="{% url 'projects:video_share_link_create' project.pk gallery.pk video.pk %}"
-             {% endif %}
              onclick="openSidebar(this)">
           <div class="video-thumbnail">
             {% if video.thumbnail %}
@@ -342,7 +256,6 @@
             </button>
             {% endif %}
           </div>
-          {% if is_owner %}<script type="application/json" class="vsl-data">[{% for sl in video.share_links.all %}{% if not forloop.first %},{% endif %}{"token":"{{ sl.token }}","access_type_display":"{{ sl.get_access_type_display|escapejs }}","has_password":{% if sl.has_password %}true{% else %}false{% endif %},"url":"{{ request.scheme }}://{{ request.get_host }}{% url 'projects:share_gate' sl.token %}","delete_url":"{% url 'projects:share_link_delete' project.pk sl.token %}"}{% endfor %}]</script>{% endif %}
         </div>
       {% endfor %}
     </div>
@@ -374,6 +287,9 @@
     {% if is_owner %}
     <button type="button" class="md-icon-button" onclick="startSidebarRename();" aria-label="Rename" title="Rename">
       <span class="material-symbols-outlined">edit</span>
+    </button>
+    <button type="button" class="md-icon-button" onclick="openShareDialogForCurrentVideo();" aria-label="Share" title="Share this video">
+      <span class="material-symbols-outlined">share</span>
     </button>
     <button type="button" class="md-icon-button" onclick="openMoveDialogForCurrentVideo();" aria-label="Move" title="Move to another gallery">
       <span class="material-symbols-outlined">drive_file_move</span>
@@ -448,31 +364,6 @@
     </div>
     {% endif %}
 
-    <!-- Video share links (owner only) -->
-    {% if is_owner %}
-    <div style="border-top:1px solid var(--md-sys-color-outline-variant); padding-top:16px; margin-top:8px;">
-      <h3 class="md-title-medium" style="margin:0 0 10px;">Share this Video</h3>
-      <div id="video-share-links" style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;"></div>
-      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
-        <label style="display:flex; align-items:center; gap:5px; cursor:pointer; padding:6px 10px; border-radius:var(--md-sys-shape-corner-small); border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container); font-size:13px;">
-          <input type="radio" name="vsl_access" value="view" checked style="accent-color:var(--md-sys-color-primary);">
-          View only
-        </label>
-        <label style="display:flex; align-items:center; gap:5px; cursor:pointer; padding:6px 10px; border-radius:var(--md-sys-shape-corner-small); border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container); font-size:13px;">
-          <input type="radio" name="vsl_access" value="commentator" style="accent-color:var(--md-sys-color-primary);">
-          Commentator
-        </label>
-      </div>
-      <div style="display:flex; gap:8px; align-items:center;">
-        <input type="password" id="vsl-password" placeholder="Password (optional)"
-               class="admin-compact-input" style="flex:1; min-width:0;" autocomplete="new-password">
-        <button type="button" id="vsl-generate-btn" class="md-button-tonal" style="flex-shrink:0; white-space:nowrap;">
-          <span class="material-symbols-outlined">link</span>
-          Generate
-        </button>
-      </div>
-    </div>
-    {% endif %}
   </div>
   <div class="md-sidebar-footer">
     {% if is_owner or role == 'commentator' %}
@@ -546,7 +437,7 @@
       <span class="material-symbols-outlined">group</span>
       Share Gallery
     </h2>
-    <div class="md-dialog-content" style="padding:0 24px 8px;">
+    <div class="md-dialog-content" style="padding:0 24px 8px; max-height:75vh; overflow-y:auto;">
 
       <!-- Current project-level shares -->
       {% if shares %}
@@ -612,9 +503,38 @@
         </button>
       </form>
 
-      <!-- Public share link -->
+      <!-- Active gallery share links -->
       <hr class="md-divider" style="margin:20px 0 12px;">
-      <p class="md-label-medium text-on-surface-variant" style="margin-bottom:10px;">Create a public link</p>
+      <p class="md-label-medium text-on-surface-variant" style="margin-bottom:10px;">Active gallery links</p>
+      {% if share_links %}
+      <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:16px;">
+        {% for sl in share_links %}
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:nowrap;">
+          <span class="md-chip" style="background:var(--md-sys-color-secondary-container); color:var(--md-sys-color-on-secondary-container); font-size:12px; padding:2px 8px; border-radius:8px; white-space:nowrap; flex-shrink:0;">
+            {{ sl.get_access_type_display }}{% if sl.has_password %}
+              <span class="material-symbols-outlined" style="font-size:14px; vertical-align:-2px; margin-left:2px;">lock</span>
+            {% endif %}
+          </span>
+          <input type="text" readonly value="{{ request.scheme }}://{{ request.get_host }}{% url 'projects:share_gate' sl.token %}"
+                 style="flex:1; min-width:0; font-size:11px; font-family:monospace; padding:4px 8px;
+                        border:1px solid var(--md-sys-color-outline-variant); border-radius:4px;
+                        background:var(--md-sys-color-surface-container); color:var(--md-sys-color-on-surface); cursor:pointer;"
+                 onclick="this.select(); document.execCommand('copy');" title="Click to copy">
+          <form method="post" action="{% url 'projects:share_link_delete' project.pk sl.token %}" style="display:inline; flex-shrink:0;">
+            {% csrf_token %}
+            <button type="submit" class="md-icon-button" title="Delete link" style="color:var(--md-sys-color-error);">
+              <span class="material-symbols-outlined" style="font-size:18px;">delete</span>
+            </button>
+          </form>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="md-body-small text-on-surface-variant" style="margin-bottom:16px;">No gallery share links yet.</p>
+      {% endif %}
+
+      <!-- Create gallery public link -->
+      <p class="md-label-medium text-on-surface-variant" style="margin-bottom:10px;">Create a gallery link</p>
       <form method="post" action="{% url 'projects:gallery_share_link_create' project.pk gallery.pk %}" style="display:flex; flex-direction:column; gap:10px;">
         {% csrf_token %}
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
@@ -640,6 +560,86 @@
           </button>
         </div>
       </form>
+
+      <!-- Per-video share links — list + create form -->
+      <hr class="md-divider" style="margin:20px 0 12px;">
+      <p class="md-label-medium text-on-surface-variant" style="margin-bottom:6px;">
+        Per-video links
+        <span id="vsl-count" class="md-body-small text-on-surface-variant" style="margin-left:6px;">
+          ({{ video_share_rows|length }})
+        </span>
+      </p>
+      <div id="vsl-list" style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;">
+        {% if video_share_rows %}
+          {% for row in video_share_rows %}
+          <div data-token="{{ row.link.token }}"
+               style="display:flex; align-items:center; gap:8px; flex-wrap:nowrap;
+                      padding:6px 0; border-bottom:1px solid var(--md-sys-color-outline-variant);">
+            <span class="md-body-small" style="flex:0 0 28%; min-width:0; overflow:hidden;
+                                                text-overflow:ellipsis; white-space:nowrap;"
+                  title="{{ row.video.filename_original|default:row.video.pk }}">
+              {{ row.video.filename_original|default:row.video.pk }}
+            </span>
+            <span class="md-chip" style="background:var(--md-sys-color-secondary-container);
+                                         color:var(--md-sys-color-on-secondary-container);
+                                         font-size:12px; padding:2px 8px; border-radius:8px;
+                                         white-space:nowrap; flex-shrink:0;">
+              {% if row.link.access_type == 'commentator' %}Commentator
+              {% elif row.link.access_type == 'rank' %}Rank
+              {% else %}View{% endif %}
+              {% if row.link.has_password %}
+              <span class="material-symbols-outlined" style="font-size:14px; vertical-align:-2px; margin-left:2px;">lock</span>
+              {% endif %}
+            </span>
+            <input type="text" readonly
+                   value="{{ request.scheme }}://{{ request.get_host }}{% url 'projects:share_gate' row.link.token %}"
+                   style="flex:1; min-width:0; font-size:11px; font-family:monospace; padding:4px 8px;
+                          border:1px solid var(--md-sys-color-outline-variant); border-radius:4px;
+                          background:var(--md-sys-color-surface-container);
+                          color:var(--md-sys-color-on-surface); cursor:pointer;"
+                   onclick="this.select(); document.execCommand('copy');" title="Click to copy">
+            <button class="md-icon-button" style="color:var(--md-sys-color-error); flex-shrink:0;"
+                    onclick="deleteVideoShareLink('{{ row.link.token }}')" title="Delete link">
+              <span class="material-symbols-outlined" style="font-size:18px;">delete</span>
+            </button>
+          </div>
+          {% endfor %}
+        {% else %}
+          <span id="vsl-empty" class="md-body-small text-on-surface-variant">No per-video links yet.</span>
+        {% endif %}
+      </div>
+
+      <p class="md-label-medium text-on-surface-variant" style="margin-bottom:8px;">Create a per-video link</p>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <select id="vsl-video-select"
+                style="padding:8px 12px; border-radius:var(--md-sys-shape-corner-small);
+                       border:1px solid var(--md-sys-color-outline);
+                       background:var(--md-sys-color-surface-container);
+                       color:var(--md-sys-color-on-surface); font-size:14px;">
+          <option value="">Select a video…</option>
+          {% for v in videos %}
+            <option value="{{ v.pk }}">{{ v.filename_original|default:v.pk }}</option>
+          {% endfor %}
+        </select>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <label style="display:flex; align-items:center; gap:5px; cursor:pointer; padding:6px 10px; border-radius:var(--md-sys-shape-corner-small); border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container); font-size:13px;">
+            <input type="radio" name="vsl_access" value="view" checked style="accent-color:var(--md-sys-color-primary);">
+            View only
+          </label>
+          <label style="display:flex; align-items:center; gap:5px; cursor:pointer; padding:6px 10px; border-radius:var(--md-sys-shape-corner-small); border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container); font-size:13px;">
+            <input type="radio" name="vsl_access" value="commentator" style="accent-color:var(--md-sys-color-primary);">
+            Commentator
+          </label>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <input type="password" id="vsl-password" placeholder="Password (optional)"
+                 class="admin-compact-input" style="flex:1; min-width:0;" autocomplete="new-password">
+          <button type="button" id="vsl-generate-btn" class="md-button-tonal" style="flex-shrink:0; white-space:nowrap;">
+            <span class="material-symbols-outlined">link</span>
+            Generate
+          </button>
+        </div>
+      </div>
 
     </div>
     <div class="md-dialog-actions">
@@ -712,6 +712,7 @@
   "deleteVideoBaseUrl": "{% url 'projects:video_delete' project.pk gallery.pk '00000000-0000-0000-0000-000000000000' %}",
   "renameVideoBaseUrl": "{% url 'projects:video_rename' project.pk gallery.pk '00000000-0000-0000-0000-000000000000' %}",
   "moveVideoBaseUrl":   "{% url 'projects:video_move' project.pk gallery.pk '00000000-0000-0000-0000-000000000000' %}",
+  "videoShareCreateBaseUrl": "{% url 'projects:video_share_link_create' project.pk gallery.pk '00000000-0000-0000-0000-000000000000' %}",
   "bulkMoveUrl":   "{% url 'projects:video_bulk_move' %}",
   "bulkDeleteUrl": "{% url 'projects:video_bulk_delete' %}",
   "galleryPickerUrl": "{% url 'projects:gallery_picker_list' %}",

@@ -1,5 +1,6 @@
 import json
 import os
+import secrets
 
 from django.conf import settings
 from django.contrib import messages
@@ -720,6 +721,7 @@ def comment_list_view(request, pk, gallery_pk, video_id):
             "text": c.text,
             "timestamp_seconds": c.timestamp_seconds,
             "created_at": c.created_at.isoformat(),
+            "edited_at": c.edited_at.isoformat() if c.edited_at else None,
             "is_own": c.author_id is not None and c.author_id == request.user.id,
         }
         for c in video.comments.select_related("author").all()
@@ -759,6 +761,7 @@ def comment_create_view(request, pk, gallery_pk, video_id):
         author=request.user,
         text=text,
         timestamp_seconds=ts,
+        edit_token=secrets.token_urlsafe(16),
     )
     return JsonResponse({
         "id": comment.id,
@@ -768,6 +771,38 @@ def comment_create_view(request, pk, gallery_pk, video_id):
         "created_at": comment.created_at.isoformat(),
         "is_own": True,
     }, status=201)
+
+
+@login_required
+@require_POST
+def comment_update_view(request, pk, gallery_pk, video_id, comment_id):
+    """Edit a comment. Author only — owner cannot edit other people's words."""
+    gallery, role = _get_accessible_gallery(request.user, pk, gallery_pk)
+    video = get_object_or_404(Video, pk=video_id, gallery=gallery)
+    comment = get_object_or_404(VideoComment, pk=comment_id, video=video)
+
+    if comment.author_id != request.user.id:
+        return JsonResponse({"error": "Permission denied."}, status=403)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    text = (data.get("text") or "").strip()
+    if not text:
+        return JsonResponse({"error": "Comment text is required."}, status=400)
+    if len(text) > 4000:
+        return JsonResponse({"error": "Comment is too long."}, status=400)
+
+    comment.text = text
+    comment.edited_at = timezone.now()
+    comment.save(update_fields=["text", "edited_at"])
+    return JsonResponse({
+        "id": comment.id,
+        "text": comment.text,
+        "edited_at": comment.edited_at.isoformat(),
+    })
 
 
 @login_required
@@ -1143,7 +1178,10 @@ def public_comment_list_view(request, token):
             "text": c.text,
             "timestamp_seconds": c.timestamp_seconds,
             "created_at": c.created_at.isoformat(),
-            "is_own": False,  # guests can't delete their own comments
+            "edited_at": c.edited_at.isoformat() if c.edited_at else None,
+            # ownership for guests is determined client-side via localStorage
+            # of edit_tokens, so we never claim is_own from the server here.
+            "is_own": False,
         }
         for c in video.comments.select_related("author").all()
     ]
@@ -1183,6 +1221,7 @@ def public_comment_create_view(request, token):
         except (TypeError, ValueError):
             ts = None
 
+    edit_token = secrets.token_urlsafe(16)
     comment = VideoComment.objects.create(
         video=video,
         author=None,           # guest
@@ -1190,6 +1229,7 @@ def public_comment_create_view(request, token):
         share_link_token=str(link.token),
         text=text,
         timestamp_seconds=ts,
+        edit_token=edit_token,
     )
     return JsonResponse({
         "id": comment.id,
@@ -1199,7 +1239,99 @@ def public_comment_create_view(request, token):
         "timestamp_seconds": comment.timestamp_seconds,
         "created_at": comment.created_at.isoformat(),
         "is_own": False,
+        # Returned ONLY at creation time. The poster must cache this in
+        # localStorage and pass it back to edit / delete later.
+        "edit_token": edit_token,
     }, status=201)
+
+
+def _verify_guest_edit_token(comment, request, body=None):
+    """Constant-time compare a presented edit token against the stored one."""
+    presented = ""
+    if body is not None:
+        presented = body.get("edit_token") or ""
+    if not presented:
+        presented = request.headers.get("X-Edit-Token", "") or request.GET.get("edit_token", "")
+    if not presented or not comment.edit_token:
+        return False
+    return secrets.compare_digest(str(presented), str(comment.edit_token))
+
+
+@csrf_exempt
+@require_POST
+def public_comment_update_view(request, token, comment_id):
+    """Edit a guest-posted comment using its per-comment edit_token."""
+    link, err = _require_link_access(request, token)
+    if err is not None:
+        return err
+    try:
+        comment = VideoComment.objects.get(pk=comment_id)
+    except VideoComment.DoesNotExist:
+        return JsonResponse({"error": "Comment not found."}, status=404)
+
+    # The comment must belong to a video reachable through this share link.
+    if not _comment_in_link_scope(comment, link):
+        return JsonResponse({"error": "Comment not found."}, status=404)
+
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    if not _verify_guest_edit_token(comment, request, body=body):
+        return JsonResponse({"error": "Edit token does not match."}, status=403)
+
+    text = (body.get("text") or "").strip()
+    if not text:
+        return JsonResponse({"error": "Comment text is required."}, status=400)
+    if len(text) > 4000:
+        return JsonResponse({"error": "Comment is too long."}, status=400)
+
+    comment.text = text
+    comment.edited_at = timezone.now()
+    comment.save(update_fields=["text", "edited_at"])
+    return JsonResponse({
+        "id": comment.id,
+        "text": comment.text,
+        "edited_at": comment.edited_at.isoformat(),
+    })
+
+
+@csrf_exempt
+@require_POST
+def public_comment_delete_view(request, token, comment_id):
+    """Delete a guest-posted comment using its per-comment edit_token."""
+    link, err = _require_link_access(request, token)
+    if err is not None:
+        return err
+    try:
+        comment = VideoComment.objects.get(pk=comment_id)
+    except VideoComment.DoesNotExist:
+        return JsonResponse({"error": "Comment not found."}, status=404)
+    if not _comment_in_link_scope(comment, link):
+        return JsonResponse({"error": "Comment not found."}, status=404)
+
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        body = {}
+
+    if not _verify_guest_edit_token(comment, request, body=body):
+        return JsonResponse({"error": "Edit token does not match."}, status=403)
+
+    comment.delete()
+    return JsonResponse({"deleted": True})
+
+
+def _comment_in_link_scope(comment, link):
+    """Is the comment's video reachable through this share link?"""
+    if link.video_id:
+        return comment.video_id == link.video_id
+    if link.gallery_id:
+        return comment.video.gallery_id == link.gallery_id
+    if link.project_id:
+        return comment.video.gallery.project_id == link.project_id
+    return False
 
 
 def public_video_stream(request, token):

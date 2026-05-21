@@ -132,8 +132,11 @@
 {% if link.can_comment %}
 <script id="public-gallery-comment-data" type="application/json">
 {
-  "list_url":   "{% url 'projects:public_comment_list' token %}",
-  "create_url": "{% url 'projects:public_comment_create' token %}"
+  "list_url":     "{% url 'projects:public_comment_list' token %}",
+  "create_url":   "{% url 'projects:public_comment_create' token %}",
+  "update_base":  "{% url 'projects:public_comment_update' token 0 %}",
+  "delete_base":  "{% url 'projects:public_comment_delete' token 0 %}",
+  "scope":        "{{ token }}"
 }
 </script>
 {% endif %}
@@ -159,25 +162,63 @@
   }
 
   {% if link.can_comment %}
-  const cdata     = JSON.parse(document.getElementById('public-gallery-comment-data').textContent);
-  const listUrl   = cdata.list_url;
-  const createUrl = cdata.create_url;
-  const listEl    = document.getElementById('public-comments-list');
-  const textEl    = document.getElementById('public-comment-text');
-  const tsEl      = document.getElementById('public-comment-ts');
-  const nameEl    = document.getElementById('public-guest-name');
-  const errEl     = document.getElementById('public-comment-err');
-  const postBtn   = document.getElementById('public-post-btn');
+  const cdata       = JSON.parse(document.getElementById('public-gallery-comment-data').textContent);
+  const listUrl     = cdata.list_url;
+  const createUrl   = cdata.create_url;
+  const updateBase  = cdata.update_base;
+  const deleteBase  = cdata.delete_base;
+  const SCOPE       = cdata.scope;
+  const listEl      = document.getElementById('public-comments-list');
+  const textEl      = document.getElementById('public-comment-text');
+  const tsEl        = document.getElementById('public-comment-ts');
+  const nameEl      = document.getElementById('public-guest-name');
+  const errEl       = document.getElementById('public-comment-err');
+  const postBtn     = document.getElementById('public-post-btn');
+
+  // localStorage map of {commentId: editToken} keyed per share-link.
+  const STORE_KEY = `vpm.comment_tokens.${SCOPE}`;
+  function getTokenMap() {
+    try { return JSON.parse(localStorage.getItem(STORE_KEY) || '{}'); }
+    catch (_) { return {}; }
+  }
+  function rememberToken(id, tok) {
+    const m = getTokenMap(); m[String(id)] = tok;
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(m)); } catch (_) {}
+  }
+  function forgetToken(id) {
+    const m = getTokenMap(); delete m[String(id)];
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(m)); } catch (_) {}
+  }
+  function ownedToken(id) { return getTokenMap()[String(id)] || null; }
 
   try {
     const saved = localStorage.getItem('vpm.guest_name');
     if (saved) nameEl.value = saved;
   } catch (_) {}
 
+  function rowActions(id) {
+    return ownedToken(id)
+      ? `<span style="margin-left:auto; display:inline-flex; gap:2px;">
+           <button class="md-icon-button" style="color:var(--md-sys-color-on-surface-variant);"
+                   onclick="pgEditComment(${id})" title="Edit">
+             <span class="material-symbols-outlined" style="font-size:16px;">edit</span>
+           </button>
+           <button class="md-icon-button" style="color:var(--md-sys-color-error);"
+                   onclick="pgDeleteComment(${id})" title="Delete">
+             <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
+           </button>
+         </span>`
+      : '';
+  }
+
   function renderComments(list) {
     if (!list.length) {
       listEl.innerHTML = '<span class="md-body-small text-on-surface-variant">No comments yet — be the first.</span>';
       return;
+    }
+    const seen = new Set(list.map(c => String(c.id)));
+    for (const id of Object.keys(getTokenMap())) {
+      if (!seen.has(id)) forgetToken(id);
     }
     listEl.innerHTML = list.map((c) => {
       const tsBtn = c.timestamp_seconds != null
@@ -186,17 +227,22 @@
              @${formatTs(c.timestamp_seconds)}
            </button>`
         : '';
+      const edited = c.edited_at
+        ? ' <span class="md-body-small text-on-surface-variant" style="font-style:italic;">(edited)</span>'
+        : '';
       return `
-        <div style="background:var(--md-sys-color-surface-container); border-radius:var(--md-sys-shape-corner-small);
+        <div data-comment-id="${c.id}"
+             style="background:var(--md-sys-color-surface-container); border-radius:var(--md-sys-shape-corner-small);
                     padding:10px 12px; display:flex; flex-direction:column; gap:4px;">
           <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
             <span class="md-label-medium">${escapeHtml(c.author)}</span>
             ${tsBtn}
-            <span class="md-body-small text-on-surface-variant" style="margin-left:auto;">
-              ${new Date(c.created_at).toLocaleString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })}
+            <span class="md-body-small text-on-surface-variant">
+              ${new Date(c.created_at).toLocaleString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })}${edited}
             </span>
+            ${rowActions(c.id)}
           </div>
-          <p class="md-body-medium" style="margin:0; white-space:pre-wrap;">${escapeHtml(c.text)}</p>
+          <p class="md-body-medium comment-body" style="margin:0; white-space:pre-wrap;">${escapeHtml(c.text)}</p>
         </div>`;
     }).join('');
   }
@@ -222,11 +268,7 @@
 
   window.publicSubmitComment = async function () {
     const text = (textEl.value || '').trim();
-    if (!text) {
-      errEl.textContent = 'Please enter a comment.';
-      errEl.style.display = 'block';
-      return;
-    }
+    if (!text) { errEl.textContent = 'Please enter a comment.'; errEl.style.display='block'; return; }
     if (!currentVideoId) return;
     const guestName = (nameEl.value || '').trim();
     const ts = tsEl.value !== '' ? parseFloat(tsEl.value) : null;
@@ -238,28 +280,104 @@
       const resp = await fetch(createUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text, guest_name: guestName,
-          timestamp_seconds: ts,
-          video_id: currentVideoId,
-        }),
+        body: JSON.stringify({ text, guest_name: guestName, timestamp_seconds: ts, video_id: currentVideoId }),
       });
       if (!resp.ok) {
         let msg = `Server error ${resp.status}.`;
         try { const j = await resp.json(); msg = j.error || msg; } catch (_) {}
-        errEl.textContent = msg;
-        errEl.style.display = 'block';
-        return;
+        errEl.textContent = msg; errEl.style.display='block'; return;
       }
-      textEl.value = '';
-      tsEl.value = '';
+      const created = await resp.json();
+      if (created.id && created.edit_token) rememberToken(created.id, created.edit_token);
+      textEl.value=''; tsEl.value='';
       await loadComments();
     } catch (e) {
-      errEl.textContent = 'Network error — try again.';
-      errEl.style.display = 'block';
+      errEl.textContent = 'Network error — try again.'; errEl.style.display = 'block';
     } finally {
       postBtn.disabled = false;
     }
+  };
+
+  window.pgEditComment = function (commentId) {
+    const row = listEl.querySelector(`[data-comment-id="${commentId}"]`);
+    if (!row) return;
+    const body = row.querySelector('.comment-body');
+    if (!body || row.querySelector('.pg-edit-area')) return;
+    const original = body.textContent;
+    const ta = document.createElement('textarea');
+    ta.className = 'pg-edit-area';
+    ta.value = original;
+    ta.style.cssText = 'width:100%; min-height:60px; padding:8px 10px; ' +
+        'border:1px solid var(--md-sys-color-outline); border-radius:6px; ' +
+        'background:var(--md-sys-color-surface); color:var(--md-sys-color-on-surface); ' +
+        'font-size:14px; resize:vertical; box-sizing:border-box; font-family:inherit;';
+    body.style.display = 'none';
+    body.after(ta);
+    ta.focus(); ta.select();
+    const actions = document.createElement('div');
+    actions.className = 'pg-edit-actions';
+    actions.style.cssText = 'display:flex; gap:6px; justify-content:flex-end; margin-top:4px;';
+    actions.innerHTML = `
+      <button type="button" class="md-button-text" style="font-size:12px;"
+              onclick="pgCancelEdit(${commentId})">Cancel</button>
+      <button type="button" class="md-button-tonal" style="font-size:12px;"
+              onclick="pgSaveEdit(${commentId})">Save</button>`;
+    ta.after(actions);
+  };
+
+  window.pgCancelEdit = function (commentId) {
+    const row = listEl.querySelector(`[data-comment-id="${commentId}"]`);
+    if (!row) return;
+    row.querySelector('.pg-edit-area')?.remove();
+    row.querySelector('.pg-edit-actions')?.remove();
+    const body = row.querySelector('.comment-body');
+    if (body) body.style.display = '';
+  };
+
+  window.pgSaveEdit = async function (commentId) {
+    const row = listEl.querySelector(`[data-comment-id="${commentId}"]`);
+    if (!row) return;
+    const ta = row.querySelector('.pg-edit-area');
+    if (!ta) return;
+    const text = (ta.value || '').trim();
+    if (!text) { ta.focus(); return; }
+    const token = ownedToken(commentId);
+    if (!token) { alert('You can only edit comments you posted from this device.'); return; }
+    try {
+      const url = updateBase.replace(/\/0\/update\/$/, `/${commentId}/update/`);
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, edit_token: token }),
+      });
+      if (!resp.ok) {
+        let msg = `Failed (${resp.status}).`;
+        try { const j = await resp.json(); msg = j.error || msg; } catch (_) {}
+        alert(msg); return;
+      }
+      await loadComments();
+    } catch (e) { alert('Network error while editing.'); }
+  };
+
+  window.pgDeleteComment = async function (commentId) {
+    const token = ownedToken(commentId);
+    if (!token) { alert('You can only delete comments you posted from this device.'); return; }
+    if (!confirm('Delete this comment?')) return;
+    try {
+      const url = deleteBase.replace(/\/0\/delete\/$/, `/${commentId}/delete/`);
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ edit_token: token }),
+      });
+      if (!resp.ok) {
+        let msg = `Failed (${resp.status}).`;
+        try { const j = await resp.json(); msg = j.error || msg; } catch (_) {}
+        alert(msg); return;
+      }
+      forgetToken(commentId);
+      await loadComments();
+    } catch (e) { alert('Network error while deleting.'); }
   };
   {% endif %}
 

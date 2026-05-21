@@ -69,16 +69,22 @@
 {% if link.can_comment %}
 <script id="public-comment-data" type="application/json">
 {
-  "list_url":   "{% url 'projects:public_comment_list' link.token %}",
-  "create_url": "{% url 'projects:public_comment_create' link.token %}"
+  "list_url":     "{% url 'projects:public_comment_list' link.token %}",
+  "create_url":   "{% url 'projects:public_comment_create' link.token %}",
+  "update_base":  "{% url 'projects:public_comment_update' link.token 0 %}",
+  "delete_base":  "{% url 'projects:public_comment_delete' link.token 0 %}",
+  "scope":        "{{ link.token }}"
 }
 </script>
 <script>
 (function () {
   'use strict';
-  const data = JSON.parse(document.getElementById('public-comment-data').textContent);
-  const listUrl   = data.list_url;
-  const createUrl = data.create_url;
+  const data       = JSON.parse(document.getElementById('public-comment-data').textContent);
+  const listUrl    = data.list_url;
+  const createUrl  = data.create_url;
+  const updateBase = data.update_base; // ends with /0/update/
+  const deleteBase = data.delete_base; // ends with /0/delete/
+  const SCOPE      = data.scope;       // share-link token; namespaces localStorage
 
   const listEl  = document.getElementById('comments-list');
   const textEl  = document.getElementById('comment-text');
@@ -88,7 +94,25 @@
   const btnEl   = document.getElementById('post-comment-btn');
   const player  = document.getElementById('public-video-player');
 
-  // Cache the guest name so it persists between refreshes on the same device.
+  // Per-share-link map of {commentId: editToken} kept in localStorage so the
+  // user can edit / delete the comments they created from this device.
+  const STORE_KEY = `vpm.comment_tokens.${SCOPE}`;
+  function getTokenMap() {
+    try { return JSON.parse(localStorage.getItem(STORE_KEY) || '{}'); }
+    catch (_) { return {}; }
+  }
+  function rememberToken(id, token) {
+    const map = getTokenMap();
+    map[String(id)] = token;
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(map)); } catch (_) {}
+  }
+  function forgetToken(id) {
+    const map = getTokenMap();
+    delete map[String(id)];
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(map)); } catch (_) {}
+  }
+  function ownedToken(id) { return getTokenMap()[String(id)] || null; }
+
   try {
     const stored = localStorage.getItem('vpm.guest_name');
     if (stored) nameEl.value = stored;
@@ -104,11 +128,30 @@
     const s = (secs % 60).toFixed(1).padStart(4, '0');
     return m > 0 ? `${m}:${s}` : `${s}s`;
   }
+  function rowActions(commentId) {
+    return ownedToken(commentId)
+      ? `<span style="margin-left:auto; display:inline-flex; gap:2px;">
+           <button class="md-icon-button" style="color:var(--md-sys-color-on-surface-variant);"
+                   onclick="pcEditComment(${commentId})" title="Edit">
+             <span class="material-symbols-outlined" style="font-size:16px;">edit</span>
+           </button>
+           <button class="md-icon-button" style="color:var(--md-sys-color-error);"
+                   onclick="pcDeleteComment(${commentId})" title="Delete">
+             <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
+           </button>
+         </span>`
+      : '';
+  }
 
   function renderComments(list) {
     if (!list.length) {
       listEl.innerHTML = '<span class="md-body-small text-on-surface-variant">No comments yet — be the first.</span>';
       return;
+    }
+    // Drop tokens for comments the server no longer knows about.
+    const seenIds = new Set(list.map(c => String(c.id)));
+    for (const id of Object.keys(getTokenMap())) {
+      if (!seenIds.has(id)) forgetToken(id);
     }
     listEl.innerHTML = list.map((c) => {
       const tsBtn = c.timestamp_seconds != null
@@ -117,17 +160,22 @@
              @${formatTs(c.timestamp_seconds)}
            </button>`
         : '';
+      const edited = c.edited_at
+        ? ' <span class="md-body-small text-on-surface-variant" style="font-style:italic;">(edited)</span>'
+        : '';
       return `
-        <div style="background:var(--md-sys-color-surface-container); border-radius:var(--md-sys-shape-corner-small);
+        <div data-comment-id="${c.id}"
+             style="background:var(--md-sys-color-surface-container); border-radius:var(--md-sys-shape-corner-small);
                     padding:10px 12px; display:flex; flex-direction:column; gap:4px;">
           <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
             <span class="md-label-medium">${escapeHtml(c.author)}</span>
             ${tsBtn}
-            <span class="md-body-small text-on-surface-variant" style="margin-left:auto;">
-              ${new Date(c.created_at).toLocaleString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })}
+            <span class="md-body-small text-on-surface-variant">
+              ${new Date(c.created_at).toLocaleString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })}${edited}
             </span>
+            ${rowActions(c.id)}
           </div>
-          <p class="md-body-medium" style="margin:0; white-space:pre-wrap;">${escapeHtml(c.text)}</p>
+          <p class="md-body-medium comment-body" style="margin:0; white-space:pre-wrap;">${escapeHtml(c.text)}</p>
         </div>`;
     }).join('');
   }
@@ -141,9 +189,7 @@
       }
       const { comments } = await resp.json();
       renderComments(comments || []);
-    } catch (e) {
-      console.error(e);
-    }
+    } catch (e) { console.error(e); }
   }
 
   window.pcUseCurrentTime = function () {
@@ -159,12 +205,10 @@
     }
     const guestName = (nameEl.value || '').trim();
     const ts = tsEl.value !== '' ? parseFloat(tsEl.value) : null;
-
     try { localStorage.setItem('vpm.guest_name', guestName); } catch (_) {}
 
     btnEl.disabled = true;
     errEl.style.display = 'none';
-
     try {
       const resp = await fetch(createUrl, {
         method: 'POST',
@@ -178,14 +222,103 @@
         errEl.style.display = 'block';
         return;
       }
-      textEl.value = '';
-      tsEl.value = '';
+      const created = await resp.json();
+      if (created.id && created.edit_token) rememberToken(created.id, created.edit_token);
+      textEl.value = ''; tsEl.value = '';
       await loadComments();
     } catch (e) {
       errEl.textContent = 'Network error — try again.';
       errEl.style.display = 'block';
     } finally {
       btnEl.disabled = false;
+    }
+  };
+
+  window.pcEditComment = function (commentId) {
+    const row = listEl.querySelector(`[data-comment-id="${commentId}"]`);
+    if (!row) return;
+    const body = row.querySelector('.comment-body');
+    if (!body || row.querySelector('.pc-edit-area')) return;
+    const original = body.textContent;
+    const ta = document.createElement('textarea');
+    ta.className = 'pc-edit-area';
+    ta.value = original;
+    ta.style.cssText = 'width:100%; min-height:60px; padding:8px 10px; ' +
+        'border:1px solid var(--md-sys-color-outline); border-radius:6px; ' +
+        'background:var(--md-sys-color-surface); color:var(--md-sys-color-on-surface); ' +
+        'font-size:14px; resize:vertical; box-sizing:border-box; font-family:inherit;';
+    body.style.display = 'none';
+    body.after(ta);
+    ta.focus(); ta.select();
+    const actions = document.createElement('div');
+    actions.className = 'pc-edit-actions';
+    actions.style.cssText = 'display:flex; gap:6px; justify-content:flex-end; margin-top:4px;';
+    actions.innerHTML = `
+      <button type="button" class="md-button-text" style="font-size:12px;"
+              onclick="pcCancelEdit(${commentId})">Cancel</button>
+      <button type="button" class="md-button-tonal" style="font-size:12px;"
+              onclick="pcSaveEdit(${commentId})">Save</button>`;
+    ta.after(actions);
+  };
+
+  window.pcCancelEdit = function (commentId) {
+    const row = listEl.querySelector(`[data-comment-id="${commentId}"]`);
+    if (!row) return;
+    row.querySelector('.pc-edit-area')?.remove();
+    row.querySelector('.pc-edit-actions')?.remove();
+    const body = row.querySelector('.comment-body');
+    if (body) body.style.display = '';
+  };
+
+  window.pcSaveEdit = async function (commentId) {
+    const row = listEl.querySelector(`[data-comment-id="${commentId}"]`);
+    if (!row) return;
+    const ta = row.querySelector('.pc-edit-area');
+    if (!ta) return;
+    const text = (ta.value || '').trim();
+    if (!text) { ta.focus(); return; }
+    const token = ownedToken(commentId);
+    if (!token) { alert('You can only edit comments you posted from this device.'); return; }
+    try {
+      const url = updateBase.replace(/\/0\/update\/$/, `/${commentId}/update/`);
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, edit_token: token }),
+      });
+      if (!resp.ok) {
+        let msg = `Failed (${resp.status}).`;
+        try { const j = await resp.json(); msg = j.error || msg; } catch (_) {}
+        alert(msg);
+        return;
+      }
+      await loadComments();
+    } catch (e) {
+      alert('Network error while editing.');
+    }
+  };
+
+  window.pcDeleteComment = async function (commentId) {
+    const token = ownedToken(commentId);
+    if (!token) { alert('You can only delete comments you posted from this device.'); return; }
+    if (!confirm('Delete this comment?')) return;
+    try {
+      const url = deleteBase.replace(/\/0\/delete\/$/, `/${commentId}/delete/`);
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ edit_token: token }),
+      });
+      if (!resp.ok) {
+        let msg = `Failed (${resp.status}).`;
+        try { const j = await resp.json(); msg = j.error || msg; } catch (_) {}
+        alert(msg);
+        return;
+      }
+      forgetToken(commentId);
+      await loadComments();
+    } catch (e) {
+      alert('Network error while deleting.');
     }
   };
 

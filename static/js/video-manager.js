@@ -213,11 +213,25 @@ function renderComments(comments) {
             ? `<button class="md-button-text" style="font-size:12px; padding:0 4px; min-width:0;"
                        onclick="seekToTimestamp(${c.timestamp_seconds})">@${formatTimestamp(c.timestamp_seconds)}</button>`
             : '';
-        const del = c.is_own || _isOwner
-            ? `<button class="md-icon-button" style="margin-left:auto; color:var(--md-sys-color-error); flex-shrink:0;"
+        const canEdit = !!c.is_own;
+        const canDelete = c.is_own || _isOwner;
+        const edited = c.edited_at
+            ? ' <span class="md-body-small text-on-surface-variant" style="font-style:italic;" title="Edited">(edited)</span>'
+            : '';
+        const editBtn = canEdit
+            ? `<button class="md-icon-button" style="flex-shrink:0; color:var(--md-sys-color-on-surface-variant);"
+                       onclick="startEditComment(${c.id})" title="Edit">
+                 <span class="material-symbols-outlined" style="font-size:16px;">edit</span>
+               </button>`
+            : '';
+        const delBtn = canDelete
+            ? `<button class="md-icon-button" style="flex-shrink:0; color:var(--md-sys-color-error);"
                        onclick="deleteComment(${c.id})" title="Delete">
                  <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
                </button>`
+            : '';
+        const actions = (editBtn || delBtn)
+            ? `<span style="margin-left:auto; display:inline-flex; gap:2px;">${editBtn}${delBtn}</span>`
             : '';
         return `
             <div style="background:var(--md-sys-color-surface-container); border-radius:var(--md-sys-shape-corner-small);
@@ -225,12 +239,86 @@ function renderComments(comments) {
               <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
                 <span class="md-label-medium">${escapeHtml(c.author)}</span>
                 ${ts}
-                <span class="md-body-small text-on-surface-variant" style="margin-left:auto; white-space:nowrap;">${formatDate(c.created_at)}</span>
-                ${del}
+                <span class="md-body-small text-on-surface-variant" style="white-space:nowrap;">${formatDate(c.created_at)}${edited}</span>
+                ${actions}
               </div>
-              <p class="md-body-medium" style="margin:0; white-space:pre-wrap;">${escapeHtml(c.text)}</p>
+              <p class="md-body-medium comment-body" style="margin:0; white-space:pre-wrap;">${escapeHtml(c.text)}</p>
             </div>`;
     }).join('');
+}
+
+// Inline edit: turn the body into a textarea and replace the actions row
+// with Save / Cancel. PATCH-style update via comment_update_view.
+function startEditComment(commentId) {
+    const row = commentsList.querySelector(`[data-comment-id="${commentId}"]`);
+    if (!row) return;
+    const bodyEl = row.querySelector('.comment-body');
+    if (!bodyEl || row.querySelector('.comment-edit-area')) return;
+
+    const original = bodyEl.textContent;
+    const ta = document.createElement('textarea');
+    ta.className = 'comment-edit-area';
+    ta.value = original;
+    ta.style.cssText = 'width:100%; min-height:60px; padding:8px 10px; ' +
+        'border:1px solid var(--md-sys-color-outline); border-radius:6px; ' +
+        'background:var(--md-sys-color-surface); color:var(--md-sys-color-on-surface); ' +
+        'font-size:14px; resize:vertical; box-sizing:border-box; font-family:inherit;';
+    bodyEl.style.display = 'none';
+    bodyEl.after(ta);
+    ta.focus();
+    ta.select();
+
+    const actions = document.createElement('div');
+    actions.className = 'comment-edit-actions';
+    actions.style.cssText = 'display:flex; gap:6px; justify-content:flex-end; margin-top:4px;';
+    actions.innerHTML = `
+        <button type="button" class="md-button-text" style="font-size:12px;"
+                onclick="cancelEditComment(${commentId})">Cancel</button>
+        <button type="button" class="md-button-tonal" style="font-size:12px;"
+                onclick="saveEditComment(${commentId})">Save</button>`;
+    ta.after(actions);
+}
+
+function cancelEditComment(commentId) {
+    const row = commentsList.querySelector(`[data-comment-id="${commentId}"]`);
+    if (!row) return;
+    const ta = row.querySelector('.comment-edit-area');
+    const actions = row.querySelector('.comment-edit-actions');
+    const bodyEl = row.querySelector('.comment-body');
+    if (ta) ta.remove();
+    if (actions) actions.remove();
+    if (bodyEl) bodyEl.style.display = '';
+}
+
+async function saveEditComment(commentId) {
+    const row = commentsList.querySelector(`[data-comment-id="${commentId}"]`);
+    if (!row) return;
+    const ta = row.querySelector('.comment-edit-area');
+    if (!ta) return;
+    const text = (ta.value || '').trim();
+    if (!text) { ta.focus(); return; }
+
+    const url = `/projects/${_currentProjectPk}/galleries/${_currentGalleryPk}/videos/${_currentVideoId}/comments/${commentId}/update/`;
+    try {
+        const resp = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken(),
+            },
+            body: JSON.stringify({ text }),
+        });
+        if (!resp.ok) {
+            alert(`Failed to update comment (${resp.status}).`);
+            return;
+        }
+        // Reload the whole thread — simplest way to also pick up the
+        // server's "edited" timestamp into the row.
+        loadComments();
+    } catch (e) {
+        alert('Network error while editing.');
+        console.error('[Comments] edit error', e);
+    }
 }
 
 async function submitComment() {
@@ -918,6 +1006,9 @@ window.confirmDeleteVideo    = confirmDeleteVideo;
 window.formatBytes           = formatBytes;
 window.submitComment         = submitComment;
 window.deleteComment         = deleteComment;
+window.startEditComment      = startEditComment;
+window.cancelEditComment     = cancelEditComment;
+window.saveEditComment       = saveEditComment;
 window.seekToTimestamp       = seekToTimestamp;
 window.useVideoTimestamp     = useVideoTimestamp;
 window.showCopied            = showCopied;

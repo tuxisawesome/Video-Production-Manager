@@ -97,6 +97,11 @@ urlpatterns = [
         views.comment_delete_view,
         name="comment_delete",
     ),
+    path(
+        "<uuid:pk>/galleries/<uuid:gallery_pk>/videos/<uuid:video_id>/comments/<int:comment_id>/update/",
+        views.comment_update_view,
+        name="comment_update",
+    ),
 
     # Public share link routes (no login required)
     path("share/<uuid:token>/", views.share_gate_view, name="share_gate"),
@@ -116,6 +121,8 @@ urlpatterns = [
     path("share/<uuid:token>/video-stream/", views.public_video_stream, name="public_video_stream"),
     path("share/<uuid:token>/comments/",        views.public_comment_list_view,   name="public_comment_list"),
     path("share/<uuid:token>/comments/create/", views.public_comment_create_view, name="public_comment_create"),
+    path("share/<uuid:token>/comments/<int:comment_id>/update/", views.public_comment_update_view, name="public_comment_update"),
+    path("share/<uuid:token>/comments/<int:comment_id>/delete/", views.public_comment_delete_view, name="public_comment_delete"),
     path("share/<uuid:token>/rank/", views.public_rank_view, name="public_rank"),
     path("share/<uuid:token>/rank/next-pair/", views.public_next_pair_view, name="public_next_pair"),
     path("share/<uuid:token>/rank/submit/", views.public_submit_comparison_view, name="public_submit"),

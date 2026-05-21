@@ -201,6 +201,12 @@ class VideoComment(models.Model):
     # Token of the ShareLink used to post (when posted by a guest). Lets the
     # owner identify which link a problematic comment came in through.
     share_link_token = models.CharField(max_length=64, blank=True, default="")
+    # Per-comment opaque token returned only at creation time. The poster
+    # caches it client-side (localStorage) and presents it later to edit or
+    # delete their own comment — the only ownership signal we have for guests
+    # who aren't authenticated.
+    edit_token = models.CharField(max_length=32, blank=True, default="")
+    edited_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

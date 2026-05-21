@@ -6,14 +6,22 @@
 {% block content %}
 <div class="page-header">
   <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+    {# Pick the right "back" URL based on whether the share link is gallery-
+       scoped (use public_gallery) or project-scoped (use the project-gallery
+       URL that carries the gallery pk so it doesn't 404). #}
+    {% if link.gallery_id %}
+      {% url 'projects:public_gallery' token as back_url %}
+    {% else %}
+      {% url 'projects:public_project_gallery' token gallery.pk as back_url %}
+    {% endif %}
     <div>
-      <a href="{% url 'projects:public_gallery' token %}" class="md-body-medium" style="display:inline-flex; align-items:center; gap:4px; margin-bottom:4px; color:var(--md-sys-color-primary);">
+      <a href="{{ back_url }}" class="md-body-medium" style="display:inline-flex; align-items:center; gap:4px; margin-bottom:4px; color:var(--md-sys-color-primary);">
         <span class="material-symbols-outlined" style="font-size:18px;">arrow_back</span>
         {{ gallery.name }}
       </a>
       <h1 class="page-title">Rank Videos – {{ gallery.name }}</h1>
     </div>
-    <a href="{% url 'projects:public_gallery' token %}" class="md-button-tonal" style="margin-left:auto;">
+    <a href="{{ back_url }}" class="md-button-tonal" style="margin-left:auto;">
       <span class="material-symbols-outlined">video_library</span>
       View Videos
     </a>

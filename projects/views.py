@@ -1212,19 +1212,55 @@ def public_video_stream(request, token):
     return _serve_video_file(link.video)
 
 
+def _resolve_rank_gallery(link, request, body=None):
+    """
+    Pick the Gallery to rank within for a public share link.
+
+    Gallery-level links carry their own gallery — return it directly.
+    Project-level links don't, so the caller must pass ?gallery=<uuid>
+    (GET) or {"gallery": ...} (POST body) identifying which gallery
+    within the project to rank. We verify the gallery belongs to that
+    project so a token can't be used to rank in someone else's gallery.
+
+    Returns the Gallery or None.
+    """
+    if link.gallery_id:
+        return link.gallery
+    if not link.project_id:
+        return None
+    gallery_id = (body or {}).get("gallery") if body else None
+    if not gallery_id:
+        gallery_id = request.GET.get("gallery")
+    if not gallery_id:
+        return None
+    try:
+        return Gallery.objects.select_related("project").get(
+            pk=gallery_id, project_id=link.project_id,
+        )
+    except (Gallery.DoesNotExist, ValueError):
+        return None
+
+
 def public_rank_view(request, token):
-    """Public ranking page (gallery-level link with rank/commentator access)."""
+    """Public ranking page. Accepts gallery-level and project-level links."""
     link, err = _require_link_access(request, token)
     if err is not None:
         return err
-    if not link.gallery_id or not link.can_rank:
+    if not link.can_rank:
+        raise Http404
+    gallery = _resolve_rank_gallery(link, request)
+    if gallery is None:
+        # Project-level link without ?gallery= — bounce the user back to the
+        # project page so they can pick which gallery to rank.
+        if link.project_id:
+            return redirect("projects:public_project", token=token)
         raise Http404
     from recording.ranking import get_ranking_progress
-    progress = get_ranking_progress(link.gallery_id)
+    progress = get_ranking_progress(gallery.id)
     return render(request, "projects/public_rank.html", {
         "link": link,
-        "gallery": link.gallery,
-        "project": link.gallery.project,
+        "gallery": gallery,
+        "project": gallery.project,
         "progress": progress,
         "token": token,
     })
@@ -1236,25 +1272,31 @@ def public_next_pair_view(request, token):
     link, err = _require_link_access(request, token)
     if err is not None:
         return JsonResponse({"error": "Unauthorized"}, status=403)
-    if not link.gallery_id or not link.can_rank:
+    if not link.can_rank:
         return JsonResponse({"error": "Unauthorized"}, status=403)
+    gallery = _resolve_rank_gallery(link, request)
+    if gallery is None:
+        return JsonResponse({"error": "gallery required"}, status=400)
     from recording.ranking import get_ranking_progress, select_next_pair
-    progress = get_ranking_progress(link.gallery_id)
-    pair = select_next_pair(link.gallery_id)
+    progress = get_ranking_progress(gallery.id)
+    pair = select_next_pair(gallery.id)
     if pair is None:
         return JsonResponse({"complete": True, "progress": progress})
     video_a, video_b = pair
+    # Pass the gallery through so the player URL stays scoped correctly when
+    # ranking from a project-level link.
+    qs = f"?gallery={gallery.id}" if not link.gallery_id else ""
     return JsonResponse({
         "complete": False,
         "video_left": {
             "id": str(video_a.id),
-            "url": _url_reverse("projects:public_rank_video_file", args=[token, video_a.id]),
+            "url": _url_reverse("projects:public_rank_video_file", args=[token, video_a.id]) + qs,
             "name": video_a.filename_original or str(video_a.id),
             "elo": round(video_a.elo_rating, 1),
         },
         "video_right": {
             "id": str(video_b.id),
-            "url": _url_reverse("projects:public_rank_video_file", args=[token, video_b.id]),
+            "url": _url_reverse("projects:public_rank_video_file", args=[token, video_b.id]) + qs,
             "name": video_b.filename_original or str(video_b.id),
             "elo": round(video_b.elo_rating, 1),
         },
@@ -1268,13 +1310,17 @@ def public_submit_comparison_view(request, token):
     link, err = _require_link_access(request, token)
     if err is not None:
         return JsonResponse({"error": "Unauthorized"}, status=403)
-    if not link.gallery_id or not link.can_rank:
+    if not link.can_rank:
         return JsonResponse({"error": "Unauthorized"}, status=403)
 
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    gallery = _resolve_rank_gallery(link, request, body=data)
+    if gallery is None:
+        return JsonResponse({"error": "gallery required"}, status=400)
 
     video_left_id = data.get("video_left")
     video_right_id = data.get("video_right")
@@ -1284,7 +1330,6 @@ def public_submit_comparison_view(request, token):
 
     from recording.models import Comparison
     from recording.ranking import update_elo
-    gallery = link.gallery
     video_left = get_object_or_404(Video, pk=video_left_id, gallery=gallery)
     video_right = get_object_or_404(Video, pk=video_right_id, gallery=gallery)
     Comparison.objects.create(
@@ -1303,9 +1348,12 @@ def public_rank_video_file(request, token, video_id):
     link, err = _require_link_access(request, token)
     if err is not None:
         raise Http404
-    if not link.gallery_id or not link.can_rank:
+    if not link.can_rank:
         raise Http404
-    video = get_object_or_404(Video, pk=video_id, gallery=link.gallery)
+    gallery = _resolve_rank_gallery(link, request)
+    if gallery is None:
+        raise Http404
+    video = get_object_or_404(Video, pk=video_id, gallery=gallery)
     return _serve_video_file(video)
 
 

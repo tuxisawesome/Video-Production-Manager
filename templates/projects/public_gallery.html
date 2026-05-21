@@ -17,7 +17,8 @@
       <p class="page-subtitle" style="margin:0;">Shared gallery · {{ videos|length }} video{{ videos|length|pluralize }}</p>
     </div>
     {% if link.can_rank %}
-      <a href="{% url 'projects:public_rank' token %}" class="md-button-tonal" style="margin-left:auto;">
+      <a href="{% url 'projects:public_rank' token %}{% if not link.gallery_id %}?gallery={{ gallery.pk }}{% endif %}"
+         class="md-button-tonal" style="margin-left:auto;">
         <span class="material-symbols-outlined">leaderboard</span>
         Rank Videos
       </a>
@@ -87,29 +88,198 @@
     <video id="gallery-modal-player" controls style="width:100%; aspect-ratio:16/9; background:#000; display:block;"></video>
     {% if link.can_comment %}
     <div style="padding:16px;">
-      <div id="public-comments-list" style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;"></div>
+      <h3 class="md-title-medium" style="margin:0 0 12px;">Comments</h3>
+      <div id="public-comments-list" style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;">
+        <span class="md-body-small text-on-surface-variant">Loading…</span>
+      </div>
+
+      <div style="display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
+        <input type="text" id="public-guest-name" maxlength="80" placeholder="Your name (optional)"
+               style="flex:1; min-width:160px; padding:8px 12px; border-radius:var(--md-sys-shape-corner-small);
+                      border:1px solid var(--md-sys-color-outline);
+                      background:var(--md-sys-color-surface-container);
+                      color:var(--md-sys-color-on-surface); font-size:14px;">
+      </div>
+
+      <textarea id="public-comment-text" placeholder="Leave a comment…"
+                style="width:100%; min-height:64px; padding:10px 12px;
+                       border-radius:var(--md-sys-shape-corner-small);
+                       border:1px solid var(--md-sys-color-outline);
+                       background:var(--md-sys-color-surface-container);
+                       color:var(--md-sys-color-on-surface); font-size:14px;
+                       resize:vertical; box-sizing:border-box;"></textarea>
+
+      <div style="display:flex; align-items:center; gap:8px; margin-top:8px; flex-wrap:wrap;">
+        <input type="number" id="public-comment-ts" placeholder="Timestamp (s) optional" min="0" step="0.1"
+               style="width:180px; padding:6px 10px; border-radius:var(--md-sys-shape-corner-small);
+                      border:1px solid var(--md-sys-color-outline);
+                      background:var(--md-sys-color-surface-container); font-size:13px;">
+        <button type="button" class="md-button-text" style="font-size:13px;" onclick="publicUseCurrentTime();">
+          Use current time
+        </button>
+        <button type="button" id="public-post-btn" class="md-button-tonal" onclick="publicSubmitComment();">
+          <span class="material-symbols-outlined">send</span>
+          Post
+        </button>
+      </div>
+      <p id="public-comment-err" class="md-body-small"
+         style="color:var(--md-sys-color-error); margin:8px 0 0; display:none;"></p>
     </div>
     {% endif %}
   </div>
 </div>
 
+{% if link.can_comment %}
+<script id="public-gallery-comment-data" type="application/json">
+{
+  "list_url":   "{% url 'projects:public_comment_list' token %}",
+  "create_url": "{% url 'projects:public_comment_create' token %}"
+}
+</script>
+{% endif %}
+
 <script>
+(function () {
+  'use strict';
+
   const galleryOverlay = document.getElementById('gallery-modal-overlay');
   const galleryPlayer  = document.getElementById('gallery-modal-player');
   const galleryTitle   = document.getElementById('gallery-modal-title');
+  let currentVideoId = null;
 
-  function openPublicVideo(id, name, url) {
+  function escapeHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function formatTs(secs) {
+    if (secs == null) return '';
+    const m = Math.floor(secs / 60);
+    const s = (secs % 60).toFixed(1).padStart(4, '0');
+    return m > 0 ? `${m}:${s}` : `${s}s`;
+  }
+
+  {% if link.can_comment %}
+  const cdata     = JSON.parse(document.getElementById('public-gallery-comment-data').textContent);
+  const listUrl   = cdata.list_url;
+  const createUrl = cdata.create_url;
+  const listEl    = document.getElementById('public-comments-list');
+  const textEl    = document.getElementById('public-comment-text');
+  const tsEl      = document.getElementById('public-comment-ts');
+  const nameEl    = document.getElementById('public-guest-name');
+  const errEl     = document.getElementById('public-comment-err');
+  const postBtn   = document.getElementById('public-post-btn');
+
+  try {
+    const saved = localStorage.getItem('vpm.guest_name');
+    if (saved) nameEl.value = saved;
+  } catch (_) {}
+
+  function renderComments(list) {
+    if (!list.length) {
+      listEl.innerHTML = '<span class="md-body-small text-on-surface-variant">No comments yet — be the first.</span>';
+      return;
+    }
+    listEl.innerHTML = list.map((c) => {
+      const tsBtn = c.timestamp_seconds != null
+        ? `<button class="md-button-text" style="font-size:12px; padding:0 4px; min-width:0;"
+                   onclick="document.getElementById('gallery-modal-player').currentTime=${c.timestamp_seconds}">
+             @${formatTs(c.timestamp_seconds)}
+           </button>`
+        : '';
+      return `
+        <div style="background:var(--md-sys-color-surface-container); border-radius:var(--md-sys-shape-corner-small);
+                    padding:10px 12px; display:flex; flex-direction:column; gap:4px;">
+          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+            <span class="md-label-medium">${escapeHtml(c.author)}</span>
+            ${tsBtn}
+            <span class="md-body-small text-on-surface-variant" style="margin-left:auto;">
+              ${new Date(c.created_at).toLocaleString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })}
+            </span>
+          </div>
+          <p class="md-body-medium" style="margin:0; white-space:pre-wrap;">${escapeHtml(c.text)}</p>
+        </div>`;
+    }).join('');
+  }
+
+  async function loadComments() {
+    if (!currentVideoId) return;
+    listEl.innerHTML = '<span class="md-body-small text-on-surface-variant">Loading…</span>';
+    try {
+      const url = `${listUrl}?video_id=${encodeURIComponent(currentVideoId)}`;
+      const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      if (!resp.ok) {
+        listEl.innerHTML = '<span class="md-body-small" style="color:var(--md-sys-color-error);">Could not load comments.</span>';
+        return;
+      }
+      const { comments } = await resp.json();
+      renderComments(comments || []);
+    } catch (e) { console.error(e); }
+  }
+
+  window.publicUseCurrentTime = function () {
+    tsEl.value = (galleryPlayer.currentTime || 0).toFixed(1);
+  };
+
+  window.publicSubmitComment = async function () {
+    const text = (textEl.value || '').trim();
+    if (!text) {
+      errEl.textContent = 'Please enter a comment.';
+      errEl.style.display = 'block';
+      return;
+    }
+    if (!currentVideoId) return;
+    const guestName = (nameEl.value || '').trim();
+    const ts = tsEl.value !== '' ? parseFloat(tsEl.value) : null;
+    try { localStorage.setItem('vpm.guest_name', guestName); } catch (_) {}
+
+    postBtn.disabled = true;
+    errEl.style.display = 'none';
+    try {
+      const resp = await fetch(createUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text, guest_name: guestName,
+          timestamp_seconds: ts,
+          video_id: currentVideoId,
+        }),
+      });
+      if (!resp.ok) {
+        let msg = `Server error ${resp.status}.`;
+        try { const j = await resp.json(); msg = j.error || msg; } catch (_) {}
+        errEl.textContent = msg;
+        errEl.style.display = 'block';
+        return;
+      }
+      textEl.value = '';
+      tsEl.value = '';
+      await loadComments();
+    } catch (e) {
+      errEl.textContent = 'Network error — try again.';
+      errEl.style.display = 'block';
+    } finally {
+      postBtn.disabled = false;
+    }
+  };
+  {% endif %}
+
+  window.openPublicVideo = function (id, name, url) {
+    currentVideoId = id;
     galleryTitle.textContent = name;
     galleryPlayer.src = url;
     galleryOverlay.style.display = 'flex';
-  }
+    {% if link.can_comment %}
+    loadComments();
+    {% endif %}
+  };
 
-  function closePublicVideo() {
+  window.closePublicVideo = function () {
     galleryPlayer.pause();
     galleryPlayer.removeAttribute('src');
     galleryPlayer.load();
     galleryOverlay.style.display = 'none';
-  }
+    currentVideoId = null;
+  };
 
   galleryOverlay.addEventListener('click', function(e) {
     if (e.target === galleryOverlay) closePublicVideo();
@@ -118,5 +288,6 @@
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') closePublicVideo();
   });
+})();
 </script>
 {% endblock %}

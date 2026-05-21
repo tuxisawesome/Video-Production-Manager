@@ -134,6 +134,9 @@ async function submitResult(result) {
         video_right: currentPair.video_right.id,
         result:      result,  // 'left' | 'right' | 'equal'
     };
+    // When ranking via a project-level share link, the server needs to know
+    // which gallery we're ranking inside; pass it through alongside the result.
+    if (pageData.gallery_id) body.gallery = pageData.gallery_id;
 
     try {
         const response = await fetch(SUBMIT_URL, {

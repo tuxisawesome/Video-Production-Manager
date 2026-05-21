@@ -97,8 +97,9 @@
 
 <script id="page-data" type="application/json">
 {
-  "next_pair_url": "{% url 'projects:public_next_pair' token %}",
+  "next_pair_url": "{% url 'projects:public_next_pair' token %}{% if not link.gallery_id %}?gallery={{ gallery.pk }}{% endif %}",
   "submit_url":    "{% url 'projects:public_submit' token %}",
+  "gallery_id":    "{% if not link.gallery_id %}{{ gallery.pk }}{% endif %}",
   "csrf_token":    "{{ csrf_token }}"
 }
 </script>

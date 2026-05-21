@@ -4,7 +4,12 @@ import tempfile
 
 from django.conf import settings as django_settings
 from django.contrib import messages
-from django.contrib.auth import authenticate, get_user_model, login, logout
+from django.contrib.auth import (
+    authenticate, get_user_model, login, logout, update_session_auth_hash,
+)
+from django.contrib.auth.password_validation import (
+    validate_password, ValidationError as PasswordValidationError,
+)
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.http import StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -181,6 +186,50 @@ def delete_user_view(request, user_id):
     user.delete()
     messages.success(request, f'User "{username}" has been deleted.')
     return redirect("accounts:dashboard")
+
+
+@login_required
+def change_password_view(request):
+    """Let the logged-in user change their own password."""
+    if request.method == "GET":
+        return render(request, "accounts/change_password.html")
+
+    current = request.POST.get("current_password", "")
+    new1    = request.POST.get("new_password", "")
+    new2    = request.POST.get("new_password_confirm", "")
+
+    if not current or not new1 or not new2:
+        messages.error(request, "All fields are required.")
+        return render(request, "accounts/change_password.html")
+
+    # Verify current password.
+    user = authenticate(request, username=request.user.username, password=current)
+    if user is None:
+        messages.error(request, "Current password is incorrect.")
+        return render(request, "accounts/change_password.html")
+
+    if new1 != new2:
+        messages.error(request, "New passwords do not match.")
+        return render(request, "accounts/change_password.html")
+
+    if new1 == current:
+        messages.error(request, "New password must differ from the current one.")
+        return render(request, "accounts/change_password.html")
+
+    # Run Django's configured password validators (length, common-password, etc.).
+    try:
+        validate_password(new1, user=request.user)
+    except PasswordValidationError as e:
+        for msg in e.messages:
+            messages.error(request, msg)
+        return render(request, "accounts/change_password.html")
+
+    request.user.set_password(new1)
+    request.user.save()
+    # Keep the user logged in (set_password rotates the session hash).
+    update_session_auth_hash(request, request.user)
+    messages.success(request, "Password updated.")
+    return redirect("projects:list")
 
 
 @login_required

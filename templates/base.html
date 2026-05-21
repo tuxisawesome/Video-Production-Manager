@@ -24,6 +24,9 @@
           <span class="md-label-large" style="color: var(--md-sys-color-on-surface-variant);">
             {{ user.username }}
           </span>
+          <a href="{% url 'accounts:change_password' %}" class="md-icon-button" aria-label="Change password" title="Change password">
+            <span class="material-symbols-outlined">key</span>
+          </a>
           {% if user.is_staff %}
             <a href="{% url 'accounts:dashboard' %}" class="md-icon-button" aria-label="Settings">
               <span class="material-symbols-outlined">settings</span>

@@ -13,7 +13,7 @@
 
     let currentKeybinds = {
         start_stop_key: startStopInput.value || 'Space',
-        discard_key: discardInput.value || 'Escape'
+        discard_key: discardInput.value || 'Enter'
     };
 
     // Capture key press for keybind inputs
@@ -85,7 +85,7 @@
                 const data = await resp.json();
                 currentKeybinds = data;
                 if (startStopInput) startStopInput.value = data.start_stop_key || 'Space';
-                if (discardInput) discardInput.value = data.discard_key || 'Escape';
+                if (discardInput) discardInput.value = data.discard_key || 'Enter';
             }
         } catch (err) {
             console.error('Failed to load keybinds:', err);

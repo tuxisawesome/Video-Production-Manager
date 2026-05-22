@@ -49,7 +49,7 @@ let reconnectTimeout = null;
 let keepaliveInterval = null;
 
 // Keybind & settings data (fetched from server)
-let keybinds = { start_stop_key: 'Space', discard_key: 'Escape' };
+let keybinds = { start_stop_key: 'Space', discard_key: 'Enter' };
 let recordingSettings = {};
 
 // ---------------------------------------------------------------------------

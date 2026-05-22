@@ -90,7 +90,7 @@ class KeybindPreference(models.Model):
         related_name='keybind_preference',
     )
     start_stop_key = models.CharField(max_length=50, default='Space')
-    discard_key = models.CharField(max_length=50, default='Escape')
+    discard_key = models.CharField(max_length=50, default='Enter')
 
     def __str__(self):
         return f"Keybinds for {self.user}"

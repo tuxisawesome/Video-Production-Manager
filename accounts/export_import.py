@@ -579,7 +579,7 @@ def _import_keybinds(rows, username_map):
                 user=user,
                 defaults={
                     'start_stop_key': k.get('start_stop_key', 'Space'),
-                    'discard_key': k.get('discard_key', 'Escape'),
+                    'discard_key': k.get('discard_key', 'Enter'),
                 },
             )
 

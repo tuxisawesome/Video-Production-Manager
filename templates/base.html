@@ -24,12 +24,15 @@
           <span class="md-label-large" style="color: var(--md-sys-color-on-surface-variant);">
             {{ user.username }}
           </span>
+          <a href="{% url 'recording:recording_settings_view' %}" class="md-icon-button" aria-label="Recording settings" title="Recording settings &amp; shortcuts">
+            <span class="material-symbols-outlined">tune</span>
+          </a>
           <a href="{% url 'accounts:change_password' %}" class="md-icon-button" aria-label="Change password" title="Change password">
             <span class="material-symbols-outlined">key</span>
           </a>
           {% if user.is_staff %}
-            <a href="{% url 'accounts:dashboard' %}" class="md-icon-button" aria-label="Settings">
-              <span class="material-symbols-outlined">settings</span>
+            <a href="{% url 'accounts:dashboard' %}" class="md-icon-button" aria-label="Admin" title="Admin">
+              <span class="material-symbols-outlined">admin_panel_settings</span>
             </a>
           {% endif %}
           <form method="post" action="{% url 'accounts:logout' %}" style="display:inline;">

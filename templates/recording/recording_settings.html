@@ -110,10 +110,74 @@
     </div>
   </form>
 
+  {# ── Keyboard Shortcuts ── #}
+  <div class="md-card-elevated" style="padding:24px; margin-bottom:24px;">
+    <h2 class="md-title-large" style="margin-bottom:8px;">
+      <span class="material-symbols-outlined" style="font-size:22px; vertical-align:middle; margin-right:8px;">keyboard</span>
+      Keyboard Shortcuts
+    </h2>
+    <p class="md-body-small text-on-surface-variant" style="margin-bottom:20px;">
+      Used on the desktop recording control page. Click a field, then press the key you want to bind.
+    </p>
+
+    <div class="form-section">
+      <div class="flex items-center justify-between" style="gap:16px;">
+        <div style="flex:1;">
+          <span class="md-label-large">Start / Stop recording</span>
+          <p class="md-body-small text-on-surface-variant" style="margin-top:2px;">
+            Default: <kbd style="padding:1px 6px; border-radius:4px; background:var(--md-sys-color-surface-container-highest); font-family:monospace; font-size:11px;">Space</kbd>
+          </p>
+        </div>
+        <input type="text" id="keybind-start-stop-input" readonly
+               placeholder="Press a key…"
+               style="width:160px; padding:8px 12px; border-radius:var(--md-sys-shape-corner-small);
+                      border:1px solid var(--md-sys-color-outline);
+                      background:var(--md-sys-color-surface-container);
+                      color:var(--md-sys-color-on-surface);
+                      font-family:monospace; font-size:13px; text-align:center;">
+      </div>
+
+      <div class="flex items-center justify-between" style="gap:16px; margin-top:16px;">
+        <div style="flex:1;">
+          <span class="md-label-large">Discard recording</span>
+          <p class="md-body-small text-on-surface-variant" style="margin-top:2px;">
+            Default: <kbd style="padding:1px 6px; border-radius:4px; background:var(--md-sys-color-surface-container-highest); font-family:monospace; font-size:11px;">Enter</kbd>
+          </p>
+        </div>
+        <input type="text" id="keybind-discard-input" readonly
+               placeholder="Press a key…"
+               style="width:160px; padding:8px 12px; border-radius:var(--md-sys-shape-corner-small);
+                      border:1px solid var(--md-sys-color-outline);
+                      background:var(--md-sys-color-surface-container);
+                      color:var(--md-sys-color-on-surface);
+                      font-family:monospace; font-size:13px; text-align:center;">
+      </div>
+    </div>
+
+    <div class="form-actions" style="border-top:none; padding-top:16px; margin-top:16px;">
+      <span id="keybind-status" class="md-body-medium text-on-surface-variant" style="margin-right:auto;"></span>
+      <button type="button" id="save-keybinds-btn" class="md-button-filled">
+        <span class="material-symbols-outlined">save</span>
+        Save shortcuts
+      </button>
+    </div>
+  </div>
+
 </div>
+
+<style>
+  /* Visual feedback when a key is captured */
+  #keybind-start-stop-input.captured,
+  #keybind-discard-input.captured {
+    border-color: var(--md-sys-color-primary);
+    background: var(--md-sys-color-primary-container);
+    color: var(--md-sys-color-on-primary-container);
+  }
+</style>
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'js/keybind-settings.js' %}"></script>
 <script>
   var settingsUrl = '{% url "recording:recording_settings_view" %}';
   var csrfToken = '{{ csrf_token }}';
